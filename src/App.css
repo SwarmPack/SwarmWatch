@@ -1,0 +1,1037 @@
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  overflow: hidden;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
+    Apple Color Emoji, Segoe UI Emoji;
+}
+
+.overlayRoot {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.overlayRoot.collapsed {
+  justify-content: flex-start;
+  align-items: flex-start;
+  /* In collapsed mode, let clicks pass through outside the bubble */
+  pointer-events: none;
+}
+
+.bubble {
+  border: none;
+  outline: none;
+  width: 96px;
+  height: 96px;
+  border-radius: 9999px;
+  padding: 8px;
+  cursor: pointer;
+  user-select: none;
+  background: rgba(20, 20, 24, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: white;
+}
+
+/* Collapsed: show only the avatar as a perfect circle with no chrome */
+.overlayRoot.collapsed .bubble {
+  width: 84px;
+  height: 84px;
+  padding: 0;
+  background: #000;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  /* Allow interaction only on the bubble while root is click-through */
+  pointer-events: auto;
+}
+
+.overlayRoot.collapsed .noSessions {
+  display: none;
+}
+
+.bubble.expanded {
+  width: 360px;
+  height: 360px;
+  border-radius: 9999px;
+  padding: 18px;
+  gap: 10px;
+}
+
+.orbitArea {
+  position: relative;
+  width: 100%;
+  height: 360px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.orbitPlanets {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+  width: 0;
+  height: 0;
+}
+
+.orbitPlanetsSpin {
+  position: relative;
+  width: 0;
+  height: 0;
+  /* JS-driven rotation via CSS variable so counter-rotation stays perfectly in sync
+     even when planets mount/unmount (prevents upside-down avatars). */
+  transform: rotate(var(--orbit-rot, 0deg));
+  will-change: transform;
+}
+
+.planetUpright {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  /* Cancel the parent orbit rotation so avatars + labels stay upright. */
+  transform: rotate(calc(-1 * var(--orbit-rot, 0deg)));
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orbitPlanetsSpin {
+    transform: rotate(0deg);
+  }
+}
+
+.orbitRing {
+  position: absolute;
+  width: 320px;
+  height: 320px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+}
+
+.planetWrap {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 78px;
+  height: 78px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: white;
+  cursor: pointer;
+  z-index: 2;
+  /*
+    Position each planet around the ring using CSS vars.
+    Variables:
+      --i: index (0..n-1)
+      --n: count
+      --r: radius (px)
+  */
+  --r: 121px;
+  /* orbitN is always >= 1 so divide-by-zero won't occur */
+  --angle: calc(var(--i) * 1turn / var(--n));
+  transform:
+    rotate(var(--angle))
+    translateX(var(--r))
+    rotate(calc(-1 * var(--angle)))
+    translate(-39px, -39px);
+  will-change: transform;
+}
+
+.planetWrap.selected {
+  filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.22));
+}
+
+.planetBtn {
+  width: 78px;
+  height: 78px;
+  border-radius: 9999px;
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.planetDismiss {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.45);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 4;
+}
+
+.planetDismiss:hover {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+/* Removed per-avatar ring; avatars revolve around the middle orbit ring. */
+
+.planetMeta {
+  position: absolute;
+  top: 82px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 110px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.planetName {
+  width: 110px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 650;
+  color: rgba(255, 255, 255, 0.92);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 2px 6px;
+  outline: none;
+}
+
+.planetName:focus {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.planetStatus {
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.sun {
+  position: absolute;
+  width: 210px;
+  height: 210px;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 30% 30%, rgba(255, 226, 140, 0.28), rgba(255, 166, 64, 0.16) 45%, rgba(255, 255, 255, 0.06) 75%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.35), inset 0 0 25px rgba(255, 190, 100, 0.22);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 18px;
+  gap: 6px;
+  z-index: 1;
+}
+
+.sunTitle {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+.sunSub {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  opacity: 0.9;
+}
+
+.sunUpdated {
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.sunDetail {
+  font-size: 11px;
+  opacity: 0.9;
+  max-width: 185px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.approvalCard {
+  margin-top: 8px;
+  width: 100%;
+  max-width: 190px;
+  padding: 10px 10px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.autoApproveCard {
+  margin-top: 8px;
+  width: 100%;
+  max-width: 190px;
+  padding: 10px 10px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.autoApproveGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.autoApproveBtn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.18);
+  color: rgba(255, 255, 255, 0.92);
+  border-radius: 10px;
+  padding: 6px 8px;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.autoApproveBtn.on {
+  border-color: rgba(80, 220, 160, 0.35);
+  background: rgba(80, 220, 160, 0.12);
+}
+
+.autoApproveFam {
+  text-transform: capitalize;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.autoApproveState {
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  opacity: 0.95;
+}
+
+.approvalTitle {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+}
+
+.approvalSummary {
+  font-size: 11px;
+  opacity: 0.9;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.approvalMeta {
+  font-size: 10px;
+  opacity: 0.72;
+}
+
+.approvalActions {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+
+.approvalActions button {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.18);
+  color: rgba(255, 255, 255, 0.92);
+  border-radius: 9999px;
+  padding: 5px 8px;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.approvalActions button:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.approvalSecondaryActions {
+  display: flex;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+.approvalSecondary {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.9);
+  text-decoration: underline;
+  font-size: 9.5px;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0.9;
+}
+
+.approvalSecondary:hover {
+  opacity: 1;
+}
+
+.approvalLink {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.92);
+  text-decoration: underline;
+  font-size: 10px;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* Removed explicit Close button; clicking center/outside closes. */
+
+.settingsBtn {
+  margin-top: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.18);
+  color: rgba(255, 255, 255, 0.92);
+  border-radius: 9999px;
+  padding: 6px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.settingsBtn.icon {
+  padding: 7px 12px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.activityDivider {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  opacity: 0.7;
+  padding-top: 4px;
+}
+
+.activitySummary {
+  font-size: 10px;
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+.activityHr {
+  height: 1px;
+  width: 100%;
+  background: rgba(0, 0, 0, 0.12);
+  margin: 6px 0;
+}
+
+.settingsBtn:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.settingsPanel {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 200px;
+  max-width: 200px;
+  background: rgb(20, 20, 24);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 16px;
+  padding: 14px;
+  max-height: 220px;
+  overflow: auto;
+  scrollbar-width: none;
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.5);
+  /* solid: keep visibility regardless of orbit behind */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  z-index: 5;
+}
+
+.approvalsPanel {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 220px;
+  max-width: 220px;
+  background: rgb(20, 20, 24);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 16px;
+  padding: 14px;
+  max-height: 240px;
+  overflow: auto;
+  scrollbar-width: none;
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.5);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  z-index: 7;
+}
+
+.approvalsPanel::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.approvalsHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.approvalsClose {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.18);
+  color: rgba(255, 255, 255, 0.92);
+  border-radius: 9999px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.approvalsClose:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.settingsPanel::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.activityPanel {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 280px;
+  max-width: 280px;
+  max-height: 240px;
+  overflow: auto;
+  scrollbar-width: none;
+  background: rgb(245, 245, 248);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.35);
+  /* solid: keep visibility regardless of orbit behind */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  z-index: 6;
+  color: rgba(10, 10, 12, 0.95);
+}
+
+.activityPanel::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.activityList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.activityRow {
+  display: grid;
+  grid-template-columns: 120px 14px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.activityHook {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.activityTime {
+  font-size: 10px;
+  opacity: 0.72;
+  margin-top: 2px;
+}
+
+.activityMid {
+  display: flex;
+  justify-content: center;
+}
+
+.pipe {
+  width: 6px;
+  height: 26px;
+  border-radius: 9999px;
+  background: rgba(120, 120, 140, 0.45);
+}
+
+.settingsHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.settingsIconBtn {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.18);
+  color: rgba(255, 255, 255, 0.92);
+  border-radius: 9999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.activityPanel .settingsIconBtn {
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  background: rgba(255, 255, 255, 0.75);
+  color: rgba(10, 10, 12, 0.9);
+}
+
+.activityPanel .settingsIconBtn:hover {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.settingsIconBtn:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.pipe.reading {
+  background: rgba(80, 170, 255, 0.75);
+}
+
+.pipe.editing {
+  background: rgba(190, 120, 255, 0.75);
+}
+
+.pipe.running {
+  background: rgba(80, 220, 160, 0.75);
+}
+
+.pipe.awaiting {
+  background: rgba(255, 210, 120, 0.75);
+}
+
+.pipe.error {
+  background: rgba(255, 80, 80, 0.85);
+}
+
+
+.pipe.inactive,
+.pipe.idle {
+  background: rgba(150, 150, 160, 0.35);
+}
+
+.activityDetail {
+  font-size: 11px;
+}
+
+.activityMeta {
+  font-size: 10px;
+  opacity: 0.72;
+  margin-top: 2px;
+}
+
+.settingsTitle {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.settingsSub {
+  font-size: 11px;
+  opacity: 0.85;
+  margin-bottom: 10px;
+}
+
+.settingsErr {
+  font-size: 11px;
+  color: #ffb4b4;
+  margin-bottom: 8px;
+}
+
+.settingsList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settingsRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.settingsLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settingsName {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.settingsName .twistyBtn {
+  margin-right: 4px;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.settingsSuffix {
+  margin-left: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.settingsMeta {
+  font-size: 10px;
+  opacity: 0.8;
+}
+
+.settingsWarn {
+	margin-top: 6px;
+	font-size: 10px;
+	opacity: 0.85;
+	color: rgba(255, 220, 160, 0.95);
+}
+
+.vscodeWs {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wsRow {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.wsRow button {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.18);
+  color: rgba(255, 255, 255, 0.92);
+  border-radius: 9999px;
+  padding: 5px 8px;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.wsRow button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.wsSelected {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.9);
+  border-radius: 10px;
+  padding: 6px 8px;
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wsHint {
+  font-size: 10px;
+  opacity: 0.8;
+  margin-top: 2px;
+}
+
+.wsList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wsItem {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  gap: 4px 8px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.wsPath {
+  grid-column: 1 / 2;
+  font-size: 10px;
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wsStatus {
+  grid-column: 2 / 3;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  opacity: 0.9;
+}
+
+.wsActions {
+  grid-column: 1 / 3;
+  display: flex;
+  gap: 6px;
+}
+
+.wsActions button {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.18);
+  color: rgba(255, 255, 255, 0.92);
+  border-radius: 9999px;
+  padding: 4px 8px;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.wsEmpty {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.linkBtn {
+	border: none;
+	background: transparent;
+	color: rgba(255, 255, 255, 0.92);
+	text-decoration: underline;
+	font-size: 10px;
+	padding: 0;
+	cursor: pointer;
+}
+
+.settingsRight button {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.18);
+  color: rgba(255, 255, 255, 0.92);
+  border-radius: 9999px;
+  padding: 6px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.settingsRight button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  border-radius: 9999px;
+  font-size: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.pill.ok {
+  background: rgba(80, 200, 140, 0.18);
+}
+
+.pill.warn {
+  background: rgba(255, 200, 80, 0.14);
+}
+
+.pill.info {
+  background: rgba(120, 160, 255, 0.18);
+}
+
+.settingsRunner {
+  font-size: 10px;
+  opacity: 0.75;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settingsActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.settingsActions button {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.18);
+  color: rgba(255, 255, 255, 0.92);
+  border-radius: 9999px;
+  padding: 6px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+
+
+.avatarWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Ensure the wrapper exactly fits the collapsed avatar */
+  width: 84px;
+  height: 84px;
+}
+
+.avatarBlack {
+  width: 84px;
+  height: 84px;
+  border-radius: 9999px;
+  background: #000;
+}
+
+.noSessions {
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.3px;
+  opacity: 0.85;
+}
+
+.toast {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 10px;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 11px;
+  max-width: 320px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 10;
+}
+
+.overflowRow {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.75);
+  border-radius: 12px;
+  padding: 8px 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.overflowRow:hover {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.overflowName {
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.overflowMeta {
+  font-size: 10px;
+  opacity: 0.72;
+}
+
+.stateLabel {
+  font-size: 12px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  opacity: 0.95;
+}
+
+.infoPanel {
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+}
+
+.infoRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.infoKey {
+  opacity: 0.75;
+  min-width: 66px;
+}
+
+.infoVal {
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 240px;
+}
+
+.infoVal.detail {
+  max-width: 240px;
+}
