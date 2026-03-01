@@ -1,3 +1,9 @@
+#Personal
+.clinerules/
+.cursor/
+.omni/
+.vscode/
+.idea/
 # Logs
 logs
 *.log
