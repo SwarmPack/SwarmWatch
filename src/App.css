@@ -963,6 +963,65 @@ body,
   z-index: 10;
 }
 
+/* ---------------- Updater banner ---------------- */
+
+.updateBanner {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 10px;
+  border-radius: 12px;
+  background: rgba(20, 20, 20, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(10px);
+}
+
+.updateBannerTitle {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.updateBannerSub {
+  margin-top: 2px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.updateBannerRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.updateBannerRight button {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+}
+
+.updateBannerRight button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.updateBannerClose {
+  width: 28px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+}
+
 .overflowRow {
   width: 100%;
   display: flex;

@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  lint-build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install JS deps
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Cargo check (Tauri)
+        env:
+          # Needed because tauri.conf.json uses $env:SWARM_UPDATER_PUBKEY
+          SWARM_UPDATER_PUBKEY: dummy
+        run: cargo check --manifest-path src-tauri/Cargo.toml

@@ -1,2 +1,0 @@
-#!/usr/bin/env bash
-"/Users/prastik/Library/Application Support/SwarmWatch/bin/cline-hook" "$@"

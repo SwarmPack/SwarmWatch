@@ -121,6 +121,65 @@ This prevents breakage when the `.app` is moved or when a new version is install
 
 ---
 
+## Releases, auto-updates, and GitHub Actions
+
+SwarmWatch uses the **Tauri updater** for in-app updates.
+
+### How updates are verified (public/private key)
+
+- A **public key** is embedded into the app via `src-tauri/tauri.conf.json` (`plugins.updater.pubkey`).
+- Release artifacts are signed in CI using a **private key** stored in GitHub Actions Secrets.
+- The updater downloads `latest.json`, chooses the correct platform entry, downloads the archive, and verifies the signature.
+
+This gives you the “hash + key matching” update safety property.
+
+### GitHub Actions workflows
+
+- CI: `.github/workflows/ci.yml` (runs on PRs and `main`)
+- Releases: `.github/workflows/release.yml` (runs on version tags like `v0.1.0`)
+
+The release workflow:
+1) bumps versions in `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`
+2) builds binaries for macOS (arm64 + x64), Linux (x64), Windows (x64)
+3) signs archives with `tauri signer sign`
+4) generates `latest.json` and uploads it to a pinned `latest` release
+
+### Required GitHub secrets
+
+Add these in GitHub: **Settings → Secrets and variables → Actions**
+
+- `SWARM_TAURI_SIGNING_PRIVATE_KEY`
+- `SWARM_TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+- `SWARM_UPDATER_PUBKEY`
+
+### Generate signing keys (one-time)
+
+Run locally:
+
+```bash
+npx tauri signer generate
+```
+
+Save outputs:
+- Put the **public key** into GitHub secret `SWARM_UPDATER_PUBKEY`
+- Put the **private key** into GitHub secret `SWARM_TAURI_SIGNING_PRIVATE_KEY`
+- Put the password into GitHub secret `SWARM_TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+
+Then create a tag to release:
+
+```bash
+git tag v0.1.1
+git push origin v0.1.1
+```
+
+The updater endpoint is the pinned file:
+
+```
+https://github.com/SwarmPack/SwarmWatch/releases/download/latest/latest.json
+```
+
+---
+
 ## Dev workflow (matches production)
 
 In dev, you should still install the runner and shims into the same SwarmWatch bin dir.

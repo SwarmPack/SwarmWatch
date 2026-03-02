@@ -6,6 +6,14 @@ import type { AgentKey } from './types';
 import { lottieCandidatesForAgentState } from './stateAssetsByAgent';
 import { LottieCircle } from './components/LottieCircle';
 
+type UpdateStatus =
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'available'; version?: string }
+  | { state: 'downloading'; progress?: number }
+  | { state: 'ready' }
+  | { state: 'error'; message: string };
+
 const INTEGRATION_ITEMS = [
   { key: 'cursor', label: 'Cursor' },
   { key: 'claude', label: 'Claude Code' },
@@ -181,6 +189,67 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
   const [approvalsOpen, setApprovalsOpen] = useState(false);
+
+  // ---------------- Updater banner (Tauri) ----------------
+  const UPDATE_DISMISS_KEY = 'swarmwatch.updater.bannerDismissed.v1';
+  const [updateDismissed, setUpdateDismissed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(UPDATE_DISMISS_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' });
+  const updateCheckedRef = useRef(false);
+
+  async function checkForUpdatesOnce() {
+    if (updateCheckedRef.current) return;
+    updateCheckedRef.current = true;
+
+    if (!isTauriRuntime()) return;
+    try {
+      setUpdateStatus({ state: 'checking' });
+
+      // Tauri updater v2: check() returns Update | null.
+      const { check } = await import('@tauri-apps/plugin-updater');
+      const upd = await check();
+      if (upd) {
+        setUpdateStatus({ state: 'available', version: upd.version });
+      } else {
+        setUpdateStatus({ state: 'idle' });
+      }
+    } catch (e: any) {
+      // Fail silent (no banner). If you want debug, open console.
+      setUpdateStatus({ state: 'error', message: String(e?.message ?? e) });
+    }
+  }
+
+  async function downloadAndInstallUpdate() {
+    if (!isTauriRuntime()) return;
+    try {
+      const { check } = await import('@tauri-apps/plugin-updater');
+      const upd = await check();
+      if (!upd) {
+        setUpdateStatus({ state: 'idle' });
+        return;
+      }
+
+      setUpdateStatus({ state: 'downloading' });
+      await upd.downloadAndInstall((ev: any) => {
+        // Plugin emits DownloadEvent: Started|Progress|Finished.
+        if (ev?.event === 'Progress' && typeof ev?.data?.chunkLength === 'number') {
+          // We don't know total size reliably here, so just show indeterminate.
+          setUpdateStatus({ state: 'downloading' });
+        }
+      });
+
+      setUpdateStatus({ state: 'ready' });
+
+      // Restart is handled by Tauri updater on install; no explicit relaunch needed.
+    } catch (e: any) {
+      setUpdateStatus({ state: 'error', message: String(e?.message ?? e) });
+    }
+  }
 
   const topApproval = useMemo(() => {
     const arr = [...(pendingApprovals ?? [])];
@@ -379,6 +448,14 @@ function App() {
     void refreshIntegrations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Check for updates once when the main UI is expanded.
+  useEffect(() => {
+    if (!expanded) return;
+    if (updateDismissed) return;
+    void checkForUpdatesOnce();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded, updateDismissed]);
 
   // Open the VS Code workspace panel by default when VS Code is enabled
   // or when there are any saved workspaces, so the user always sees the
@@ -672,22 +749,38 @@ function App() {
 
       const pos = await win.outerPosition();
       const sf = scaleFactorRef.current || 1;
-      const paddingPx = Math.round(12 * sf);
 
       if (expanded) {
-        // Keep the bubble under the cursor: expand in-place.
-        // Only move if needed to keep the window on-screen.
+        // Expand keeping the same visual center as the collapsed bubble.
+        // Convert logical sizes to physical px to match outerPosition coords.
+        const collapsedPx = Math.round(COLLAPSED_SIZE * sf);
         const expandedPx = Math.round(EXPANDED_SIZE * sf);
-        let x = pos.x;
-        let y = pos.y;
 
-        const monitor = await api.currentMonitor();
-        const ms = monitor?.size;
-        if (ms) {
-          const maxX = Math.round(ms.width - expandedPx - paddingPx);
-          const maxY = Math.round(ms.height - expandedPx - paddingPx);
-          x = Math.max(paddingPx, Math.min(x, maxX));
-          y = Math.max(paddingPx, Math.min(y, maxY));
+        // Current pos is collapsed top-left; compute its center.
+        const centerX = pos.x + Math.round(collapsedPx / 2);
+        const centerY = pos.y + Math.round(collapsedPx / 2);
+
+        // Target expanded top-left so centers match.
+        let x = centerX - Math.round(expandedPx / 2);
+        let y = centerY - Math.round(expandedPx / 2);
+
+        // Clamp to the current monitor work area (absolute coords), no extra margins.
+        const mon = await api.currentMonitor();
+        if (mon?.workArea) {
+          const wa = mon.workArea;
+          const minX = Math.round(wa.position.x);
+          const minY = Math.round(wa.position.y);
+          const maxX = Math.round(wa.position.x + wa.size.width - expandedPx);
+          const maxY = Math.round(wa.position.y + wa.size.height - expandedPx);
+          x = Math.max(minX, Math.min(x, maxX));
+          y = Math.max(minY, Math.min(y, maxY));
+        } else if (mon?.size && mon?.position) {
+          const minX = Math.round(mon.position.x);
+          const minY = Math.round(mon.position.y);
+          const maxX = Math.round(mon.position.x + mon.size.width - expandedPx);
+          const maxY = Math.round(mon.position.y + mon.size.height - expandedPx);
+          x = Math.max(minX, Math.min(x, maxX));
+          y = Math.max(minY, Math.min(y, maxY));
         }
 
         await win.setSize(new api.LogicalSize(EXPANDED_SIZE, EXPANDED_SIZE));
@@ -701,9 +794,37 @@ function App() {
           // ignore
         }
       } else {
-        // Collapse: keep current position, and persist it.
-        const x = pos.x;
-        const y = pos.y;
+        // Collapse keeping the same visual center as the expanded bubble.
+        const collapsedPx = Math.round(COLLAPSED_SIZE * sf);
+        const expandedPx = Math.round(EXPANDED_SIZE * sf);
+
+        // Current pos is expanded top-left; compute its center.
+        const centerX = pos.x + Math.round(expandedPx / 2);
+        const centerY = pos.y + Math.round(expandedPx / 2);
+
+        // Target collapsed top-left so centers match.
+        let x = centerX - Math.round(collapsedPx / 2);
+        let y = centerY - Math.round(collapsedPx / 2);
+
+        // Clamp to current monitor work area (absolute coords), no extra margins.
+        const mon = await api.currentMonitor();
+        if (mon?.workArea) {
+          const wa = mon.workArea;
+          const minX = Math.round(wa.position.x);
+          const minY = Math.round(wa.position.y);
+          const maxX = Math.round(wa.position.x + wa.size.width - collapsedPx);
+          const maxY = Math.round(wa.position.y + wa.size.height - collapsedPx);
+          x = Math.max(minX, Math.min(x, maxX));
+          y = Math.max(minY, Math.min(y, maxY));
+        } else if (mon?.size && mon?.position) {
+          const minX = Math.round(mon.position.x);
+          const minY = Math.round(mon.position.y);
+          const maxX = Math.round(mon.position.x + mon.size.width - collapsedPx);
+          const maxY = Math.round(mon.position.y + mon.size.height - collapsedPx);
+          x = Math.max(minX, Math.min(x, maxX));
+          y = Math.max(minY, Math.min(y, maxY));
+        }
+
         lastCollapsedPosRef.current = { x, y };
         try {
           localStorage.setItem(POS_KEY, JSON.stringify({ x, y }));
@@ -931,7 +1052,7 @@ function App() {
       // Prefer monitor work area (excludes menu bar / dock) when available
       const mon = await api.currentMonitor();
       const sf = (scaleFactorRef.current || (await win.scaleFactor()) || 1) as number;
-      const margin = Math.round(8 * sf);
+      const margin = 0; // allow exact placement without extra padding
       const collapsedPx = Math.round(COLLAPSED_SIZE * sf);
 
       let minX: number | null = null;
@@ -1139,6 +1260,75 @@ function App() {
           </>
         ) : (
           <div className="orbitArea">
+            {!updateDismissed && updateStatus.state === 'available' ? (
+              <div
+                className="updateBanner"
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                <div className="updateBannerLeft">
+                  <div className="updateBannerTitle">Update available</div>
+                  <div className="updateBannerSub">
+                    {updateStatus.version ? `Version ${updateStatus.version} is ready.` : 'A new version is ready.'}
+                  </div>
+                </div>
+                <div className="updateBannerRight">
+                  <button type="button" onClick={() => void downloadAndInstallUpdate()}>
+                    Update
+                  </button>
+                  <button
+                    type="button"
+                    className="updateBannerClose"
+                    aria-label="Dismiss update banner"
+                    onClick={() => {
+                      setUpdateDismissed(true);
+                      try {
+                        localStorage.setItem(UPDATE_DISMISS_KEY, '1');
+                      } catch {
+                        // ignore
+                      }
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {!updateDismissed && updateStatus.state === 'downloading' ? (
+              <div
+                className="updateBanner"
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                <div className="updateBannerLeft">
+                  <div className="updateBannerTitle">Downloading update…</div>
+                  <div className="updateBannerSub">
+                    {typeof updateStatus.progress === 'number'
+                      ? `${Math.round(updateStatus.progress)}%`
+                      : 'Please wait.'}
+                  </div>
+                </div>
+                <div className="updateBannerRight">
+                  <button
+                    type="button"
+                    className="updateBannerClose"
+                    aria-label="Dismiss update banner"
+                    onClick={() => {
+                      setUpdateDismissed(true);
+                      try {
+                        localStorage.setItem(UPDATE_DISMISS_KEY, '1');
+                      } catch {
+                        // ignore
+                      }
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
             <div className="orbitRing" aria-hidden />
 
             {toast ? <div className="toast">{toast}</div> : null}
@@ -1425,13 +1615,12 @@ function App() {
                     <button
                       className="settingsIconBtn"
                       type="button"
-                      aria-label="See activity"
+                      aria-label="Close settings"
                       onClick={() => {
                         setSettingsOpen(false);
-                        setActivityOpen(true);
                       }}
                     >
-                      <span aria-hidden>≡</span>
+                      <span aria-hidden>×</span>
                     </button>
                   </div>
 

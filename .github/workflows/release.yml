@@ -1,0 +1,346 @@
+name: Build and publish SwarmWatch release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.extract.outputs.version }}
+      sha: ${{ steps.bump.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from tag
+        id: extract
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Extracted version: $VERSION"
+
+      - name: Bump version in config files
+        id: bump
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.extract.outputs.version }}"
+
+          # Update package.json
+          jq --arg v "$VERSION" '.version = $v' package.json > package.json.tmp && mv package.json.tmp package.json
+
+          # Update src-tauri/tauri.conf.json
+          jq --arg v "$VERSION" '.version = $v' src-tauri/tauri.conf.json > src-tauri/tauri.conf.json.tmp && mv src-tauri/tauri.conf.json.tmp src-tauri/tauri.conf.json
+
+          # Update src-tauri/Cargo.toml
+          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+
+          # Verify
+          PKG_VERSION=$(jq -r '.version' package.json)
+          TAURI_VERSION=$(jq -r '.version' src-tauri/tauri.conf.json)
+          CARGO_VERSION=$(grep '^version = ' src-tauri/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+
+          echo "Versions after bump:"
+          echo "  package.json: $PKG_VERSION"
+          echo "  tauri.conf.json: $TAURI_VERSION"
+          echo "  Cargo.toml: $CARGO_VERSION"
+
+          if [ "$VERSION" != "$PKG_VERSION" ] || [ "$VERSION" != "$TAURI_VERSION" ] || [ "$VERSION" != "$CARGO_VERSION" ]; then
+            echo "Version bump failed!" >&2
+            exit 1
+          fi
+
+          if git diff --quiet; then
+            echo "No version changes needed"
+            echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml
+          git commit -m "chore: bump version to $VERSION"
+          git push origin HEAD:main
+
+          NEW_SHA=$(git rev-parse HEAD)
+          git tag -f "v$VERSION" "$NEW_SHA"
+          git push origin "v$VERSION" --force
+
+          echo "sha=$NEW_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Save release body from original tag commit message
+        shell: bash
+        run: |
+          git log -1 --pretty=format:"%s%n%n%b" "${{ github.sha }}" > /tmp/release_body.txt
+
+      - name: Upload release body
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-body
+          path: /tmp/release_body.txt
+
+  build-and-release:
+    needs: bump-version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            os_name: macos
+            arch_name: arm64
+            rust_target: aarch64-apple-darwin
+            platform_key: darwin-aarch64
+          - runner: macos-15-intel
+            os_name: macos
+            arch_name: x64
+            rust_target: x86_64-apple-darwin
+            platform_key: darwin-x86_64
+          - runner: ubuntu-24.04
+            os_name: linux
+            arch_name: x64
+            rust_target: x86_64-unknown-linux-gnu
+            platform_key: linux-x86_64
+          - runner: windows-latest
+            os_name: windows
+            arch_name: x64
+            rust_target: x86_64-pc-windows-msvc
+            platform_key: windows-x86_64
+
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump-version.outputs.sha }}
+
+      - name: Download release body
+        uses: actions/download-artifact@v4
+        with:
+          name: release-body
+          path: .
+
+      - name: Install Linux dependencies
+        if: matrix.os_name == 'linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Install JS dependencies
+        shell: bash
+        run: npm ci
+
+      - name: Build frontend
+        shell: bash
+        run: npm run build
+
+      - name: Ensure Cargo.lock exists
+        shell: bash
+        run: |
+          cd src-tauri
+          cargo generate-lockfile
+
+      - name: Build runner sidecar
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --manifest-path src-tauri/Cargo.toml \
+            --release \
+            --bin swarmwatch-runner \
+            --target ${{ matrix.rust_target }}
+
+          mkdir -p src-tauri/binaries
+
+          # Tauri sidecar naming convention for externalBin templates:
+          #   binaries/swarmwatch-runner-<target-triple>[.exe]
+          if [ "${{ matrix.os_name }}" = "windows" ]; then
+            cp "src-tauri/target/${{ matrix.rust_target }}/release/swarmwatch-runner.exe" \
+              "src-tauri/binaries/swarmwatch-runner-${{ matrix.rust_target }}.exe"
+          else
+            cp "src-tauri/target/${{ matrix.rust_target }}/release/swarmwatch-runner" \
+              "src-tauri/binaries/swarmwatch-runner-${{ matrix.rust_target }}"
+            chmod +x "src-tauri/binaries/swarmwatch-runner-${{ matrix.rust_target }}" || true
+          fi
+
+      - name: Build Tauri app
+        shell: bash
+        env:
+          # Needed because tauri.conf.json uses $env:SWARM_UPDATER_PUBKEY
+          SWARM_UPDATER_PUBKEY: ${{ secrets.SWARM_UPDATER_PUBKEY }}
+        run: |
+          npx tauri build --target ${{ matrix.rust_target }}
+
+      - name: Package release (macOS)
+        if: matrix.os_name == 'macos'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          tar -czf "dist/swarmwatch-${{ matrix.os_name }}-${{ matrix.arch_name }}.tar.gz" \
+            -C "src-tauri/target/${{ matrix.rust_target }}/release/bundle/macos" "SwarmWatch.app"
+
+      - name: Package release (Linux)
+        if: matrix.os_name == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          APPIMAGE=$(find "src-tauri/target/${{ matrix.rust_target }}/release/bundle/" -name "*.AppImage" | head -1)
+          if [ -z "$APPIMAGE" ]; then
+            echo "No AppImage found" >&2
+            exit 1
+          fi
+          tar -czf "dist/swarmwatch-${{ matrix.os_name }}-${{ matrix.arch_name }}.tar.gz" -C "$(dirname "$APPIMAGE")" "$(basename "$APPIMAGE")"
+
+      - name: Package release (Windows)
+        if: matrix.os_name == 'windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          # Ship the built exe in a zip (simple, Omni-like). Adjust to MSI later if desired.
+          $exe = "src-tauri/target/${{ matrix.rust_target }}/release/swarmwatch.exe"
+          if (!(Test-Path $exe)) { throw "swarmwatch.exe not found at $exe" }
+          Compress-Archive -Path $exe -DestinationPath "dist/swarmwatch-${{ matrix.os_name }}-${{ matrix.arch_name }}.zip" -Force
+
+      - name: Sign release archive
+        shell: bash
+        env:
+          SWARM_TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.SWARM_TAURI_SIGNING_PRIVATE_KEY }}
+          SWARM_TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.SWARM_TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          ARCHIVE=$(ls dist/swarmwatch-${{ matrix.os_name }}-${{ matrix.arch_name }}.*)
+          npx tauri signer sign "$ARCHIVE" \
+            --private-key "$SWARM_TAURI_SIGNING_PRIVATE_KEY" \
+            --password "$SWARM_TAURI_SIGNING_PRIVATE_KEY_PASSWORD"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: swarmwatch-${{ matrix.os_name }}-${{ matrix.arch_name }}
+          path: |
+            dist/swarmwatch-${{ matrix.os_name }}-${{ matrix.arch_name }}.*
+
+      - name: Publish to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: false
+          body_path: release_body.txt
+          files: |
+            dist/swarmwatch-${{ matrix.os_name }}-${{ matrix.arch_name }}.*
+
+  publish-update-json:
+    needs: [bump-version, build-and-release]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump-version.outputs.sha }}
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate latest.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.bump-version.outputs.version }}"
+
+          PLATFORMS=""
+          FIRST=true
+
+          add_platform() {
+            local key="$1"
+            local file="$2"
+            if [ -f "artifacts/${file}.sig" ]; then
+              local sig
+              sig=$(cat "artifacts/${file}.sig")
+              [ "$FIRST" = false ] && PLATFORMS+="," || true
+              PLATFORMS+="\n    \"${key}\": {"
+              PLATFORMS+="\n      \"url\": \"https://github.com/SwarmPack/SwarmWatch/releases/download/${{ github.ref_name }}/${file}\","
+              PLATFORMS+="\n      \"signature\": \"${sig}\""
+              PLATFORMS+="\n    }"
+              FIRST=false
+            fi
+          }
+
+          add_platform "darwin-aarch64" "swarmwatch-macos-arm64.tar.gz"
+          add_platform "darwin-x86_64" "swarmwatch-macos-x64.tar.gz"
+          add_platform "linux-x86_64" "swarmwatch-linux-x64.tar.gz"
+          add_platform "windows-x86_64" "swarmwatch-windows-x64.zip"
+
+          cat > latest.json << EOF
+          {
+            "version": "${VERSION}",
+            "notes": "Release v${VERSION}",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {$(echo -e "$PLATFORMS")
+            }
+          }
+          EOF
+
+          echo "Generated latest.json:"
+          cat latest.json
+
+      - name: Upload latest.json to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: latest.json
+
+      - name: Upload latest.json to "latest" release (stable endpoint)
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Ensure a stable endpoint:
+          #   /releases/download/latest/latest.json
+          # so tauri.conf.json can point to "releases/latest/download/latest.json".
+          gh release delete latest --yes 2>/dev/null || true
+          gh api -X DELETE /repos/${{ github.repository }}/git/refs/tags/latest 2>/dev/null || true
+
+          gh release create latest \
+            --title "Latest" \
+            --notes "Pinned latest.json for updater."
+
+          gh release upload latest latest.json --clobber
+
+      - name: Upload installer scripts to "latest" release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Upload with stable names so README links never change.
+          gh release upload latest scripts/install.sh#install.sh --clobber
+          gh release upload latest scripts/install.ps1#install.ps1 --clobber

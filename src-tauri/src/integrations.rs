@@ -733,40 +733,116 @@ pub fn install_runner() -> Result<PathBuf, String> {
 
     #[cfg(not(windows))]
     {
-        // Copy the compiled Rust runner binary into the user-level location.
-        // In packaged builds: we ship `swarmwatch-runner` as a Tauri external binary
-        // (bundle.externalBin). The packaged app binary lives in a directory that also
-        // contains the external binaries, so we can locate it via `current_exe().parent()`.
+        // Copy a compiled Rust runner binary into the user-level location.
+        // IMPORTANT: never install the placeholder sidecar (that file exists only
+        // so `cargo check` can pass without building the runner).
+
         let exe_dir = std::env::current_exe()
             .map_err(|e| format!("current_exe failed: {e}"))?
             .parent()
             .map(|p| p.to_path_buf())
             .ok_or_else(|| "current_exe has no parent".to_string())?;
 
-        // Candidate paths:
-        // 1) Packaged: externalBin next to app executable
-        // 2) Dev: cargo build output
-        let candidates = [
-            exe_dir.join("swarmwatch-runner"),
-            exe_dir
-                .join("..")
-                .join("target")
-                .join("debug")
-                .join("swarmwatch-runner"),
-        ];
+        fn find_repo_root_from(start: &Path) -> Option<PathBuf> {
+            let mut cur: Option<&Path> = Some(start);
+            for _ in 0..10 {
+                let dir = cur?;
+                if dir.join("src-tauri").join("Cargo.toml").exists() {
+                    return Some(dir.to_path_buf());
+                }
+                cur = dir.parent();
+            }
+            None
+        }
 
-        let mut found: Option<PathBuf> = None;
-        for c in candidates {
-            if c.exists() {
-                found = Some(c);
-                break;
+        fn is_placeholder(p: &Path) -> bool {
+            if !p.exists() {
+                return false;
+            }
+            std::fs::read(p)
+                .ok()
+                .is_some_and(|bytes| bytes
+                    .windows(b"swarmwatch-runner placeholder".len())
+                    .any(|w| w == b"swarmwatch-runner placeholder"))
+        }
+
+        let repo_root = find_repo_root_from(&exe_dir);
+        let target_triple = std::env::var("TARGET").unwrap_or_default();
+
+        let mut candidates: Vec<PathBuf> = vec![];
+
+        // Packaged: sidecar next to the app executable.
+        candidates.push(exe_dir.join("swarmwatch-runner"));
+
+        if let Some(root) = repo_root.clone() {
+            // Dev build outputs.
+            candidates.push(
+                root.join("src-tauri")
+                    .join("target")
+                    .join("debug")
+                    .join("swarmwatch-runner"),
+            );
+            candidates.push(
+                root.join("src-tauri")
+                    .join("target")
+                    .join("release")
+                    .join("swarmwatch-runner"),
+            );
+
+            // Repo prebuilt convenience binary (macOS arm64 in this repo).
+            candidates.push(root.join("src-tauri").join("swarmwatch-runner-aarch64-apple-darwin"));
+
+            // Sidecar naming convention created by `tauri build` / CI.
+            if !target_triple.trim().is_empty() {
+                candidates.push(
+                    root.join("src-tauri")
+                        .join("binaries")
+                        .join(format!("swarmwatch-runner-{target_triple}")),
+                );
             }
         }
 
-        let src = found.ok_or_else(|| {
-            "Could not locate compiled swarmwatch-runner binary. Run `cargo build --bin swarmwatch-runner` first."
-                .to_string()
-        })?;
+        let src = candidates
+            .into_iter()
+            .find(|c| c.exists() && !is_placeholder(c))
+            .or_else(|| {
+                // Dev-friendly: if we're inside a repo checkout, try building the runner once.
+                // This avoids accidentally installing an outdated prebuilt convenience binary.
+                let Some(root) = repo_root.clone() else {
+                    return None;
+                };
+                let src_tauri = root.join("src-tauri");
+                let cargo_toml = src_tauri.join("Cargo.toml");
+                if !cargo_toml.exists() {
+                    return None;
+                }
+
+                let ok = std::process::Command::new("cargo")
+                    .current_dir(&src_tauri)
+                    .args(["build", "--bin", "swarmwatch-runner"])
+                    .status()
+                    .map(|s| s.success())
+                    .unwrap_or(false);
+                if !ok {
+                    return None;
+                }
+
+                let built = src_tauri
+                    .join("target")
+                    .join("debug")
+                    .join("swarmwatch-runner");
+                if built.exists() && !is_placeholder(&built) {
+                    Some(built)
+                } else {
+                    None
+                }
+            })
+            .ok_or_else(|| {
+                "Could not locate a compiled swarmwatch-runner binary.\n\
+Build it first:\n\
+  cd src-tauri && cargo build --bin swarmwatch-runner\n"
+                    .to_string()
+            })?;
 
         fs::copy(&src, &runner)
             .map_err(|e| format!("copy {} -> {} failed: {e}", src.display(), runner.display()))?;

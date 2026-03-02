@@ -28,3 +28,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Tauri sidecar binaries (built per-target in CI)
+src-tauri/binaries/*
+!src-tauri/binaries/.gitkeep
+
+# Omni scratch state
+.omni/state/
