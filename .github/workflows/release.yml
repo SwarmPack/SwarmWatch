@@ -9,88 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  bump-version:
-    runs-on: ubuntu-24.04
-    outputs:
-      version: ${{ steps.extract.outputs.version }}
-      sha: ${{ steps.bump.outputs.sha }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Extract version from tag
-        id: extract
-        shell: bash
-        run: |
-          VERSION="${GITHUB_REF#refs/tags/v}"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Extracted version: $VERSION"
-
-      - name: Bump version in config files
-        id: bump
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          VERSION="${{ steps.extract.outputs.version }}"
-
-          # Update package.json
-          jq --arg v "$VERSION" '.version = $v' package.json > package.json.tmp && mv package.json.tmp package.json
-
-          # Update src-tauri/tauri.conf.json
-          jq --arg v "$VERSION" '.version = $v' src-tauri/tauri.conf.json > src-tauri/tauri.conf.json.tmp && mv src-tauri/tauri.conf.json.tmp src-tauri/tauri.conf.json
-
-          # Update src-tauri/Cargo.toml
-          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
-
-          # Verify
-          PKG_VERSION=$(jq -r '.version' package.json)
-          TAURI_VERSION=$(jq -r '.version' src-tauri/tauri.conf.json)
-          CARGO_VERSION=$(grep '^version = ' src-tauri/Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
-
-          echo "Versions after bump:"
-          echo "  package.json: $PKG_VERSION"
-          echo "  tauri.conf.json: $TAURI_VERSION"
-          echo "  Cargo.toml: $CARGO_VERSION"
-
-          if [ "$VERSION" != "$PKG_VERSION" ] || [ "$VERSION" != "$TAURI_VERSION" ] || [ "$VERSION" != "$CARGO_VERSION" ]; then
-            echo "Version bump failed!" >&2
-            exit 1
-          fi
-
-          if git diff --quiet; then
-            echo "No version changes needed"
-            echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml
-          git commit -m "chore: bump version to $VERSION"
-          git push origin HEAD:main
-
-          NEW_SHA=$(git rev-parse HEAD)
-          git tag -f "v$VERSION" "$NEW_SHA"
-          git push origin "v$VERSION" --force
-
-          echo "sha=$NEW_SHA" >> "$GITHUB_OUTPUT"
-
-      - name: Save release body from original tag commit message
-        shell: bash
-        run: |
-          git log -1 --pretty=format:"%s%n%n%b" "${{ github.sha }}" > /tmp/release_body.txt
-
-      - name: Upload release body
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-body
-          path: /tmp/release_body.txt
-
   build-and-release:
-    needs: bump-version
     strategy:
       fail-fast: false
       matrix:
@@ -121,13 +40,36 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.bump-version.outputs.sha }}
+          # Build exactly what was tagged.
+          ref: ${{ github.ref_name }}
 
-      - name: Download release body
-        uses: actions/download-artifact@v4
-        with:
-          name: release-body
-          path: .
+      - name: Extract version from tag
+        id: extract
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Extracted version: $VERSION"
+
+      - name: Bump version in config files (no commit; build-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.extract.outputs.version }}"
+
+          # Update package.json
+          jq --arg v "$VERSION" '.version = $v' package.json > package.json.tmp && mv package.json.tmp package.json
+
+          # Update src-tauri/tauri.conf.json
+          jq --arg v "$VERSION" '.version = $v' src-tauri/tauri.conf.json > src-tauri/tauri.conf.json.tmp && mv src-tauri/tauri.conf.json.tmp src-tauri/tauri.conf.json
+
+          # Update src-tauri/Cargo.toml
+          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+
+      - name: Generate release body
+        shell: bash
+        run: |
+          git log -1 --pretty=format:"%s%n%n%b" "${{ github.sha }}" > release_body.txt
 
       - name: Install Linux dependencies
         if: matrix.os_name == 'linux'
@@ -256,12 +198,12 @@ jobs:
             dist/swarmwatch-${{ matrix.os_name }}-${{ matrix.arch_name }}.*
 
   publish-update-json:
-    needs: [bump-version, build-and-release]
+    needs: [build-and-release]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.bump-version.outputs.sha }}
+          ref: ${{ github.ref_name }}
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -273,7 +215,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="${{ needs.bump-version.outputs.version }}"
+          VERSION="${GITHUB_REF#refs/tags/v}"
 
           PLATFORMS=""
           FIRST=true
@@ -343,4 +285,4 @@ jobs:
           set -euo pipefail
           # Upload with stable names so README links never change.
           gh release upload latest scripts/install.sh#install.sh --clobber
-          gh release upload latest scripts/install.ps1#install.ps1 --clobber
+          gh release upload latest scripts/install.ps1#install.ps1 --clobbe
