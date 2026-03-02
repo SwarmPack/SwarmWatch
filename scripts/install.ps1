@@ -15,8 +15,16 @@ $Repo = "SwarmPack/SwarmWatch"
 $Base = "https://github.com/$Repo/releases/latest/download"
 
 function Die($msg) {
-  Write-Error $msg
+  Write-Host ("✗ " + $msg) -ForegroundColor Red
   exit 1
+}
+
+function Info($msg) {
+  Write-Host ("➜ " + $msg) -ForegroundColor Cyan
+}
+
+function Ok($msg) {
+  Write-Host ("✓ " + $msg) -ForegroundColor Green
 }
 
 $arch = $env:PROCESSOR_ARCHITECTURE
@@ -35,13 +43,14 @@ New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 
 try {
   $zipPath = Join-Path $tmp $asset
-  Write-Host "Downloading: $url"
+  Info "SwarmWatch installer"
+  Info "Downloading latest release…"
   Invoke-WebRequest -Uri $url -OutFile $zipPath
 
   $outDir = Join-Path $tmp "out"
   New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
-  Write-Host "Extracting…"
+  Info "Extracting…"
   Expand-Archive -Path $zipPath -DestinationPath $outDir -Force
 
   # Try to locate a .exe in the extracted folder.
@@ -57,8 +66,8 @@ try {
   $destExe = Join-Path $installDir $exe.Name
   Copy-Item -Force -Path $exe.FullName -Destination $destExe
 
-  Write-Host "Installed: $destExe"
-  Write-Host "Run it by double-clicking, or:" 
+  Ok "Installed: $destExe"
+  Info "Run it by double-clicking, or:"
   Write-Host "  & '$destExe'"
 }
 finally {

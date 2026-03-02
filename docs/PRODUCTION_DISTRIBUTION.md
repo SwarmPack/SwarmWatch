@@ -142,7 +142,7 @@ The release workflow:
 1) bumps versions in `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`
 2) builds binaries for macOS (arm64 + x64), Linux (x64), Windows (x64)
 3) signs archives with `tauri signer sign`
-4) generates `latest.json` and uploads it to a pinned `latest` release
+4) generates `latest.json` and uploads it to the versioned release
 
 ### Required GitHub secrets
 
@@ -172,10 +172,10 @@ git tag v0.1.1
 git push origin v0.1.1
 ```
 
-The updater endpoint is the pinned file:
+The updater endpoint is the **latest release** asset:
 
 ```
-https://github.com/SwarmPack/SwarmWatch/releases/download/latest/latest.json
+https://github.com/SwarmPack/SwarmWatch/releases/latest/download/latest.json
 ```
 
 ---

@@ -17,8 +17,25 @@ OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 ARCH="$(uname -m)"
 
 die() {
-  echo "error: $*" 1>&2
+  printf "\033[31m✗ %s\033[0m\n" "$*" 1>&2
   exit 1
+}
+
+# Minimal Omni-like output (no verbose internals unless SWARMWATCH_INSTALL_VERBOSE=1)
+is_verbose() {
+  [[ "${SWARMWATCH_INSTALL_VERBOSE:-}" == "1" ]]
+}
+
+info() {
+  printf "\033[36m➜ %s\033[0m\n" "$*"
+}
+
+ok() {
+  printf "\033[32m✓ %s\033[0m\n" "$*"
+}
+
+warn() {
+  printf "\033[33m! %s\033[0m\n" "$*" 1>&2
 }
 
 need_cmd() {
@@ -27,6 +44,8 @@ need_cmd() {
 
 need_cmd curl
 need_cmd tar
+
+info "SwarmWatch installer"
 
 tmpdir="$(mktemp -d)"
 cleanup() { rm -rf "$tmpdir"; }
@@ -54,11 +73,11 @@ case "$OS" in
 esac
 
 url="${BASE}/${asset}"
-echo "Downloading: $url"
+info "Downloading latest release…"
 
 curl -fL "$url" -o "$tmpdir/$asset"
 
-echo "Extracting…"
+info "Extracting…"
 tar -xzf "$tmpdir/$asset" -C "$tmpdir"
 
 if [[ "$OS" == "darwin" ]]; then
@@ -66,18 +85,20 @@ if [[ "$OS" == "darwin" ]]; then
   app_path="$(find "$tmpdir" -maxdepth 3 -name 'SwarmWatch.app' -print -quit)"
   [[ -n "$app_path" ]] || die "SwarmWatch.app not found in archive"
 
-  echo "Installing to /Applications…"
+  info "Installing to /Applications…"
   rm -rf "/Applications/SwarmWatch.app" || true
   cp -R "$app_path" "/Applications/SwarmWatch.app"
 
-  # Omni-style quarantine bypass.
-  # This is what stops the ‘app is damaged / cannot be opened’ prompts.
+  # macOS: clear quarantine attribute so first launch works smoothly.
+  # Keep message minimal unless verbose.
   if command -v xattr >/dev/null 2>&1; then
-    echo "Removing macOS quarantine attribute…"
+    if is_verbose; then
+      info "Finalizing app…"
+    fi
     xattr -dr com.apple.quarantine "/Applications/SwarmWatch.app" || true
   fi
 
-  echo "Done. Open SwarmWatch from /Applications."
+  ok "Installed. Open SwarmWatch from /Applications."
 else
   # Linux: expect an AppImage.
   appimage="$(find "$tmpdir" -maxdepth 3 -type f -name '*.AppImage' -print -quit)"
@@ -88,6 +109,6 @@ else
   cp "$appimage" "$install_dir/SwarmWatch.AppImage"
   chmod +x "$install_dir/SwarmWatch.AppImage"
 
-  echo "Installed: $install_dir/SwarmWatch.AppImage"
-  echo "Run it with: $install_dir/SwarmWatch.AppImage"
+  ok "Installed: $install_dir/SwarmWatch.AppImage"
+  info "Run it with: $install_dir/SwarmWatch.AppImage"
 fi
