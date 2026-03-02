@@ -4,12 +4,14 @@ set -euo pipefail
 # SwarmWatch installer (macOS + Linux)
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/SwarmPack/SwarmWatch/main/scripts/install.sh | bash
+#   curl -fsSL https://github.com/SwarmPack/SwarmWatch/releases/latest/download/install.sh | bash
 #
-# This script downloads the correct artifact from the pinned `latest` release.
+# Omni-style behavior:
+# - Always install from the GitHub "latest release" endpoint (no custom pinned `latest` release).
+# - This script downloads assets from whatever GitHub currently marks as the latest release.
 
 REPO="SwarmPack/SwarmWatch"
-BASE="https://github.com/${REPO}/releases/download/latest"
+BASE="https://github.com/${REPO}/releases/latest/download"
 
 OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 ARCH="$(uname -m)"

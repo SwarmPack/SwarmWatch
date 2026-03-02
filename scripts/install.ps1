@@ -2,15 +2,17 @@
 SwarmWatch installer (Windows)
 
 Usage (PowerShell):
-  iwr -useb https://github.com/SwarmPack/SwarmWatch/releases/download/latest/install.ps1 | iex
+  iwr -useb https://github.com/SwarmPack/SwarmWatch/releases/latest/download/install.ps1 | iex
 
-This downloads the correct artifact from the pinned `latest` release.
+Omni-style behavior:
+- Always install from the GitHub "latest release" endpoint (no custom pinned `latest` release).
+- This script downloads assets from whatever GitHub currently marks as the latest release.
 #>
 
 $ErrorActionPreference = "Stop"
 
 $Repo = "SwarmPack/SwarmWatch"
-$Base = "https://github.com/$Repo/releases/download/latest"
+$Base = "https://github.com/$Repo/releases/latest/download"
 
 function Die($msg) {
   Write-Error $msg

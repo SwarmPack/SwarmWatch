@@ -24,14 +24,14 @@ Placeholders (fill in your release URLs later). Click Copy to grab the command.
 
 ### macOS and Linux
 ```bash
-curl -fsSL https://github.com/SwarmPack/SwarmWatch/releases/download/latest/install.sh | bash
+curl -fsSL https://github.com/SwarmPack/SwarmWatch/releases/latest/download/install.sh | bash
 
 ```
 <p align="right"><a href="#" title="Copy command"><img alt="Copy" src="https://img.shields.io/badge/Copy-18181B?style=for-the-badge"></a></p>
 
 ### Windows (PowerShell)
 ```powershell
-iwr -useb https://github.com/SwarmPack/SwarmWatch/releases/download/latest/install.ps1 | iex
+iwr -useb https://github.com/SwarmPack/SwarmWatch/releases/latest/download/install.ps1 | iex
 
 ```
 <p align="right"><a href="#" title="Copy command"><img alt="Copy" src="https://img.shields.io/badge/Copy-18181B?style=for-the-badge"></a></p>
@@ -161,6 +161,28 @@ Icons
 ---
 
 ## Troubleshooting
+
+### Verify download endpoints (debug)
+These commands are safe and help confirm which assets exist on the current GitHub “latest release”.
+
+```bash
+# Installer scripts
+curl -fsSIL https://github.com/SwarmPack/SwarmWatch/releases/latest/download/install.sh | head
+
+# macOS (Apple Silicon)
+curl -fsSIL https://github.com/SwarmPack/SwarmWatch/releases/latest/download/swarmwatch-macos-arm64.tar.gz | head
+
+# macOS (Intel)
+curl -fsSIL https://github.com/SwarmPack/SwarmWatch/releases/latest/download/swarmwatch-macos-x64.tar.gz | head
+
+# Linux x64
+curl -fsSIL https://github.com/SwarmPack/SwarmWatch/releases/latest/download/swarmwatch-linux-x64.tar.gz | head
+```
+
+```powershell
+# Windows x64
+iwr -Method Head https://github.com/SwarmPack/SwarmWatch/releases/latest/download/swarmwatch-windows-x64.zip
+```
 
 Claude “Invalid Settings … hooks: Expected array, but received undefined”
 - Use the new matcher-based schema and ensure each event has an array with `{ matcher, hooks: [ ... ] }` entries (see example above).

@@ -261,30 +261,10 @@ jobs:
           tag_name: ${{ github.ref_name }}
           files: latest.json
 
-      - name: Upload latest.json to "latest" release (stable endpoint)
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          # Ensure a stable endpoint:
-          #   /releases/download/latest/latest.json
-          # so tauri.conf.json can point to "releases/latest/download/latest.json".
-          gh release delete latest --yes 2>/dev/null || true
-          gh api -X DELETE /repos/${{ github.repository }}/git/refs/tags/latest 2>/dev/null || true
-
-          gh release create latest \
-            --title "Latest" \
-            --notes "Pinned latest.json for updater."
-
-          gh release upload latest latest.json --clobber
-
-      - name: Upload installer scripts to "latest" release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          # Upload with stable names so README links never change.
-          gh release upload latest scripts/install.sh#install.sh --clobber
-          gh release upload latest scripts/install.ps1#install.ps1 --clobber
+      - name: Upload installer scripts to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            scripts/install.sh
+            scripts/install.ps1

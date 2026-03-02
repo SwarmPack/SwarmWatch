@@ -48,7 +48,7 @@
     "updater": {
       "pubkey": "$env:SWARM_UPDATER_PUBKEY",
       "endpoints": [
-        "https://github.com/SwarmPack/SwarmWatch/releases/download/latest/latest.json"
+        "https://github.com/SwarmPack/SwarmWatch/releases/latest/download/latest.json"
       ]
     }
   }
