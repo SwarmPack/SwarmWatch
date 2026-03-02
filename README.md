@@ -1,210 +1,143 @@
 # SwarmWatch
 
-SwarmWatch is a tiny, always-on-top orbit for your coding agents—listens to IDE/tool hooks, shows live avatars, and gates risky actions behind one‑click approvals over a fast local WebSocket.
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white&labelColor=1e1f22)](https://discord.gg/WHS8VwAj)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/SwarmPack/SwarmWatch)](https://github.com/SwarmPack/SwarmWatch/releases)
+![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/SwarmPack/SwarmWatch/total)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-## What it does (at a glance)
-- Orchestrates multiple coding agents around a compact always-on-top bubble
-- Surfaces approval prompts so guarded actions only run when you say so
-- Tracks state clearly: idle → thinking → running → done (plus blocked/error)
-- Runs fully local; no PATH edits required (absolute shim paths)
+SwarmWatch is an activity monitor and control plane for AI coding swarms. It shows exactly what your agents are doing in real time, giving you an always-on desktop overlay to watch, approve, and direct their work.
 
-## Supported agents
-- VS Code (workspace hook)
+---
+
+## 🎬 Demo
+
+<!-- Add your video or GIF here -->
+
+---
+
+## 📦 Available In
+
 - Cursor
-- Claude Desktop (new matcher-based hooks schema)
-- Cline (workspace `.clinerules/hooks`)
-
-Note: Windsurf is not included.
+- Claude
+- Cline
+- GitHub Copilot
+- VS Code plugins
 
 ---
 
-## Install (no admin rights)
+## 🖥️ Supported Platforms
 
-Placeholders (fill in your release URLs later). Click Copy to grab the command.
+- Mac
+- Windows
+- Linux
 
-### macOS and Linux
+---
+
+## 🚀 Installation (2 Steps)
+
+1) Direct install via shell
+
+macOS and Linux:
 ```bash
-curl -fsSL https://github.com/SwarmPack/SwarmWatch/releases/latest/download/install.sh | bash
-
+curl -fsSL https://github.com/SwarmPack/SwarmWatch/releases/download/latest/install.sh | bash
 ```
-<p align="right"><a href="#" title="Copy command"><img alt="Copy" src="https://img.shields.io/badge/Copy-18181B?style=for-the-badge"></a></p>
 
-### Windows (PowerShell)
+Windows (PowerShell):
 ```powershell
-iwr -useb https://github.com/SwarmPack/SwarmWatch/releases/latest/download/install.ps1 | iex
-
+iwr -useb https://github.com/SwarmPack/SwarmWatch/releases/download/latest/install.ps1 | iex
 ```
-<p align="right"><a href="#" title="Copy command"><img alt="Copy" src="https://img.shields.io/badge/Copy-18181B?style=for-the-badge"></a></p>
 
-> If you haven’t published a release yet, build locally (see Dev/Build) and copy the sidecar into your per-user bin as `swarmwatch-runner`/`swarmwatch-runner.exe`.
+2) Enable Agents(UI)
+
+Open the SwarmWatch desktop app → Settings → toggle the agents/IDEs you want. Hooks are written for you—no manual edits.
+
+> For local build and alternative methods, see [docs/local-installation.md](docs/local-installation.md).
 
 ---
 
-## How it works
+## ✨ Features
 
-SwarmWatch has three pieces:
+- Real‑time view of multiple coding agents and instances.
+- Bidirectional Approve/Decline from the overlay itself
+- Execution logs for observability of autonomous agents.
+- Tamagotchi‑style dog reacting to actions.
+- Fully local: communicates only on localhost
+- Zero‑friction enablement: UI buttons apply hooks automatically
 
-1) Runner (sidecar)
-- A small native binary invoked by agent shims. It reports tool events to the desktop app and receives approval decisions over a local, bidirectional WebSocket.
-
-2) Shims (identity launchers)
-- Very small per-agent launchers named `cursor-hook`, `vscode-hook`, `claude-hook`, `cline-hook`.
-- On Unix, they `exec` the runner with an `SWARMWATCH_IDE=<agent>` env var. On Windows, they’re copied exe names; the runner infers the agent from argv[0].
-
-3) Desktop app (Tauri v2)
-- Shows the orbit UI and the Approvals pane.
-- Persists your bubble position, runs lightweight background logic, and bundles platform icons.
-
-### Hooks and where they live
-- VS Code: workspace-level `.vscode/settings.json` contains SwarmWatch hook settings that reference the absolute path to `vscode-hook`.
-  - Example (simplified):
-  ```json
-  {
-    "swarmwatch.hooks.enabled": true,
-    "swarmwatch.hooks.vscodeHookPath": "/Users/you/Library/Application Support/SwarmWatch/bin/vscode-hook"
-  }
-  ```
-- Cursor: the integration invokes the `cursor-hook` shim (configured by the SwarmWatch Integrations panel or your editor settings).
-- Claude Desktop: `~/.claude/settings.json` uses the new matcher-based hook schema and points to `claude-hook`.
-  - Minimal example:
-  ```json
-  {
-    "hooks": {
-      "UserPromptSubmit": [
-        { "matcher": { "tools": ["*"] }, "hooks": [{ "type": "command", "command": "/abs/path/to/claude-hook" }] }
-      ],
-      "PreToolUse": [
-        { "matcher": { "tools": ["*"] }, "hooks": [{ "type": "command", "command": "/abs/path/to/claude-hook" }] }
-      ],
-      "PostToolUse": [
-        { "matcher": { "tools": ["*"] }, "hooks": [{ "type": "command", "command": "/abs/path/to/claude-hook" }] }
-      ]
-    }
-  }
-  ```
-- Cline: workspace-level hooks in `.clinerules/hooks/` execute the shim. Example `TaskComplete`:
-  ```bash
-  #!/usr/bin/env bash
-  "/Users/you/Library/Application Support/SwarmWatch/bin/cline-hook" "$@"
-  ```
-
-### Agent states and transitions
-- idle → thinking → running → done
-- blocked (awaiting approval) can occur after thinking or running, depending on your policy
-- error: shown when a hook fails or a tool returns non-zero
-
-Typical transitions:
-- A tool event arrives (e.g., build/test/codegen) → agent enters `thinking`, then `running`.
-- If a guarded action is requested, the runner pauses and raises an Approval → UI shows `blocked` until you approve/deny.
-- On success, `done`; on failure, `error`. Collapsing to the small bubble shows an at-a-glance status.
-
-### Approvals and transport
-- The runner and app maintain a local, bidirectional WebSocket channel.
-- Approval requests carry action metadata; your decision is sent back instantly and the runner continues or aborts.
-
-### Avatars
-- Default set: Builder, Reviewer, Tester, Docs (4 avatars). You can enable/disable families per your workflow.
 
 ---
 
-## Where things are installed
+## 🏗️ How It Works (Architecture)
 
-Per-user SwarmWatch bin (no PATH changes needed):
-- macOS: `~/Library/Application Support/SwarmWatch/bin/`
-- Linux: `${XDG_DATA_HOME:-~/.local/share}/SwarmWatch/bin/`
-- Windows: `%LOCALAPPDATA%\\SwarmWatch\\bin\\`
+SwarmWatch basically works on a hook system: IDEs/agents invoke tiny per‑agent shims that call a local runner, which reports events and receives approval decisions over a localhost control plane.
 
-Contents:
-- `swarmwatch-runner` (or `.exe`) — the native sidecar
-- `cursor-hook`, `vscode-hook`, `claude-hook`, `cline-hook` — tiny shims
+Three pieces:
+1) Runner (sidecar): native binary that reports events and receives approvals over a local WebSocket.
+2) Shims (identity launchers): `cursor-hook`, `vscode-hook`, `claude-hook`, `cline-hook` that exec the runner with agent identity.
+3) Desktop app (Tauri v2): the always‑on‑top overlay that shows states, avatars, and approval prompts.
 
-Workspace-local files used by some agents:
-- VS Code: `.vscode/settings.json` (references the absolute shim path)
-- Cline: `.clinerules/hooks/*` (shell scripts calling the shim)
+Refer to [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full diagrams and flows. For local installation methods, see [docs/local-installation.md](docs/local-installation.md) (we prefer the UI toggles as the first‑run path).
 
-Global user config (agent-owned):
-- Claude Desktop: `~/.claude/settings.json` (matcher-based hooks schema)
+### What Gets Modified (Impacted Files)
 
-Auto-approval and policy
-- Approval policies can be configured per agent (e.g., require approval for file writes). The presence of a guard in the runner config determines if an event goes into `blocked`.
+- VS Code (per‑project): .github/hooks/*
+- Cline (per‑project): .clinerules/hooks/*
+- Claude Desktop (per-user): ~/.claude settings.json
+- Cursor (per-user): ~/.cursor/hooks.json
 
----
-
-## Development and build
-
-Prereqs
-- Node 18+, Rust stable, Tauri v2 toolchain
-- macOS: Xcode CLTs; Windows: MSVC Build Tools; Linux: GTK/WebKit dev packages
-
-Run in dev:
-```bash
-npm install
-npm run dev
-```
-
-Create a production bundle:
-```bash
-# Build the sidecar and copy to Tauri binaries (CI does this too)
-cd src-tauri
-cargo build --bin swarmwatch-runner --release
-TRIPLE=$(rustc -vV | awk -F": " "/host/ {print $2}")
-mkdir -p binaries && cp target/release/swarmwatch-runner "binaries/swarmwatch-runner-$TRIPLE"
-cd ..
-
-# Bundle the desktop app
-npx tauri build
-```
-
-Icons
-- App icons live in `src-tauri/icons/` and are generated from the project SVG.
+Tip: add generated hook files and project settings to your .gitignore (e.g., .vscode/settings.json, .clinerules/hooks/*) to avoid noisy diffs.
 
 ---
 
-## Troubleshooting
+## ⚠️ Gotchas
 
-### Verify download endpoints (debug)
-These commands are safe and help confirm which assets exist on the current GitHub “latest release”.
+- When overlay is not running: runners make a quick /health probe and fail‑open (no blocking) if the UI is down (~150ms timeout).
+- Approval waiting time: 60 seconds per guarded action before adapters fall back to the IDE’s native prompt where applicable.
+- Inactivity: if no hook events arrive for 3 minutes, the agent becomes `inactive`.
+- Git ignore: consider ignoring `.github/hooks/*` and `.clinerules/hooks/*` when SwarmWatch manages them.
 
-```bash
-# Installer scripts
-curl -fsSIL https://github.com/SwarmPack/SwarmWatch/releases/latest/download/install.sh | head
+Hook storage matrix (fill specifics as you validate in your envs):
 
-# macOS (Apple Silicon)
-curl -fsSIL https://github.com/SwarmPack/SwarmWatch/releases/latest/download/swarmwatch-macos-arm64.tar.gz | head
-
-# macOS (Intel)
-curl -fsSIL https://github.com/SwarmPack/SwarmWatch/releases/latest/download/swarmwatch-macos-x64.tar.gz | head
-
-# Linux x64
-curl -fsSIL https://github.com/SwarmPack/SwarmWatch/releases/latest/download/swarmwatch-linux-x64.tar.gz | head
-```
-
-```powershell
-# Windows x64
-iwr -Method Head https://github.com/SwarmPack/SwarmWatch/releases/latest/download/swarmwatch-windows-x64.zip
-```
-
-Claude “Invalid Settings … hooks: Expected array, but received undefined”
-- Use the new matcher-based schema and ensure each event has an array with `{ matcher, hooks: [ ... ] }` entries (see example above).
-
-Already-tracked dotfiles now ignored
-```bash
-git rm -r --cached .omni .cursor .vscode .idea .DS_Store .clinerules
-git commit -m "chore(git): stop tracking ignored dotfiles"
-git push
-```
-
-Tauri dock icon didn’t change (macOS)
-- Icon changes apply to the bundle; run `npx tauri build` and launch the .app. Dev mode may cache the icon.
-
-Window position drifts on expand/collapse
-- Positions are in physical pixels; on Retina displays, values appear doubled. The app preserves the center and clamps to your monitor work area.
+| Agent / Platform | macOS | Windows | Linux |
+| --- | --- | --- | --- |
+| VS Code | .github/hooks/* | .github/hooks/* | .github/hooks/* |
+| Claude Desktop | ~/.claude/settings.json | %APPDATA%/Claude/settings.json | ~/.config/claude/settings.json |
+| Cline | .clinerules/hooks/* | .clinerules/hooks/* | .clinerules/hooks/* |
+| Cursor | ~/.cursor/hooks.json | ~/.cursor/hooks.json | ~/.cursor/hooks.json |
 
 ---
 
-## Security & privacy
-- All hooks run locally and communicate with the desktop app over a local WebSocket.
-- No code or data is sent externally unless your agent/tool does so.
+## 🧭 State Model
 
-## License
-This project is open source. See `LICENSE` for details.
+States: Idle, Thinking, Reading, Editing, Awaiting, Running, Error, Done, Inactive.
+
+Rules:
+- Guarded actions enter `awaiting` (overlay shows Approve/Decline). Wait cap: 60s.
+- Health/fail‑open: quick probe (~150ms) skips awaiting if the UI is unreachable.
+- Inactivity: no events for 180s → `inactive`.
+
+---
+
+## 🔒 Security & Privacy
+
+- All hooks run locally; inter‑process communication is over a local WebSocket/HTTP on 127.0.0.1:4100.
+- Note: the local port 4100 endpoint is unauthenticated today; we plan to add authentication/authorization.
+
+---
+
+## 🔭 Future Work
+
+- Support more agents/IDEs (e.g., Anti‑Gravity Windsurf, broader Cursor/Cloud coverage)
+- More diverse avatars and reactions
+- Authenticate local control plane on port 4100
+- UI enhancements and bug fixes
+- Performance optimizations across UI and runner
+- Support light-weight database.
+
+Contributions welcome! Open an issue or PR for ideas, fixes, or features. Or we can discuss in Discord.
+
+---
+
+## 📄 License
+
+This project is open source under MIT. See [LICENSE](LICENSE).
