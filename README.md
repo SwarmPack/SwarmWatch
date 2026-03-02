@@ -1,9 +1,9 @@
-# SwarmWatch
-
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white&labelColor=1e1f22)](https://discord.gg/WHS8VwAj)
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/SwarmPack/SwarmWatch)](https://github.com/SwarmPack/SwarmWatch/releases)
 ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/SwarmPack/SwarmWatch/total)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+
+# SwarmWatch
 
 SwarmWatch is an activity monitor and control plane for AI coding swarms. It shows exactly what your agents are doing in real time, giving you an always-on desktop overlay to watch, approve, and direct their work.
 
