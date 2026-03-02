@@ -64,7 +64,9 @@ jobs:
           jq --arg v "$VERSION" '.version = $v' src-tauri/tauri.conf.json > src-tauri/tauri.conf.json.tmp && mv src-tauri/tauri.conf.json.tmp src-tauri/tauri.conf.json
 
           # Update src-tauri/Cargo.toml
-          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+          # NOTE: macOS runners use BSD sed where `sed -i` requires a backup suffix.
+          # Use perl for portability.
+          perl -pi -e "s/^version\s*=\s*\".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
 
       - name: Generate release body
         shell: bash
@@ -285,4 +287,4 @@ jobs:
           set -euo pipefail
           # Upload with stable names so README links never change.
           gh release upload latest scripts/install.sh#install.sh --clobber
-          gh release upload latest scripts/install.ps1#install.ps1 --clobbe
+          gh release upload latest scripts/install.ps1#install.ps1 --clobber
