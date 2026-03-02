@@ -18,21 +18,12 @@ SwarmWatch is an activity monitor and control plane for AI coding swarms. It sho
 
 <hr style="border:0;border-top:1px solid #e5e7eb;margin:12px 0;" />
 
-## 📦 Available In
-
-- Cursor
-- Claude
-- Cline
-- GitHub Copilot
-- VS Code plugins
-
-<hr style="border:0;border-top:1px solid #e5e7eb;margin:12px 0;" />
-
-## 🖥️ Supported Platforms
-
-- Mac
-- Windows
-- Linux
+<p>
+	<small>
+		<b>Works with:</b> Cursor • Claude • Cline • GitHub Copilot • VS Code plugins &nbsp;|&nbsp;
+		<b>Platforms:</b> macOS • Windows • Linux
+	</small>
+</p>
 
 <hr style="border:0;border-top:1px solid #e5e7eb;margin:12px 0;" />
 
