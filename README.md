@@ -7,13 +7,16 @@
 
 SwarmWatch is an activity monitor and control plane for AI coding swarms. It shows exactly what your agents are doing in real time, giving you an always-on desktop overlay to watch, approve, and direct their work.
 
----
+<hr style="border:0;border-top:1px solid #e5e7eb;margin:12px 0;" />
 
 ## 🎬 Demo
 
-<!-- Add your video or GIF here -->
+<p align="center">
+	<img src="public/SwarmIMovie.gif" alt="SwarmWatch demo" width="720" />
+  
+</p>
 
----
+<hr style="border:0;border-top:1px solid #e5e7eb;margin:12px 0;" />
 
 ## 📦 Available In
 
@@ -23,7 +26,7 @@ SwarmWatch is an activity monitor and control plane for AI coding swarms. It sho
 - GitHub Copilot
 - VS Code plugins
 
----
+<hr style="border:0;border-top:1px solid #e5e7eb;margin:12px 0;" />
 
 ## 🖥️ Supported Platforms
 
@@ -31,7 +34,7 @@ SwarmWatch is an activity monitor and control plane for AI coding swarms. It sho
 - Windows
 - Linux
 
----
+<hr style="border:0;border-top:1px solid #e5e7eb;margin:12px 0;" />
 
 ## 🚀 Installation (2 Steps)
 
@@ -39,12 +42,12 @@ SwarmWatch is an activity monitor and control plane for AI coding swarms. It sho
 
 macOS and Linux:
 ```bash
-curl -fsSL https://github.com/SwarmPack/SwarmWatch/releases/download/latest/install.sh | bash
+curl -fsSL https://github.com/SwarmPack/SwarmWatch/releases/latest/download/install.sh | bash
 ```
 
 Windows (PowerShell):
 ```powershell
-iwr -useb https://github.com/SwarmPack/SwarmWatch/releases/download/latest/install.ps1 | iex
+iwr -useb https://github.com/SwarmPack/SwarmWatch/releases/latest/download/install.ps1 | iex
 ```
 
 2) Enable Agents(UI)
@@ -53,7 +56,7 @@ Open the SwarmWatch desktop app → Settings → toggle the agents/IDEs you want
 
 > For local build and alternative methods, see [docs/local-installation.md](docs/local-installation.md).
 
----
+<hr style="border:0;border-top:1px solid #e5e7eb;margin:12px 0;" />
 
 ## ✨ Features
 
@@ -65,7 +68,7 @@ Open the SwarmWatch desktop app → Settings → toggle the agents/IDEs you want
 - Zero‑friction enablement: UI buttons apply hooks automatically
 
 
----
+<hr style="border:0;border-top:1px solid #e5e7eb;margin:12px 0;" />
 
 ## 🏗️ How It Works (Architecture)
 
@@ -87,7 +90,7 @@ Refer to [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full diagrams and flow
 
 Tip: add generated hook files and project settings to your .gitignore (e.g., .vscode/settings.json, .clinerules/hooks/*) to avoid noisy diffs.
 
----
+<hr style="border:0;border-top:1px solid #e5e7eb;margin:12px 0;" />
 
 ## ⚠️ Gotchas
 
@@ -105,7 +108,7 @@ Hook storage matrix (fill specifics as you validate in your envs):
 | Cline | .clinerules/hooks/* | .clinerules/hooks/* | .clinerules/hooks/* |
 | Cursor | ~/.cursor/hooks.json | ~/.cursor/hooks.json | ~/.cursor/hooks.json |
 
----
+<hr style="border:0;border-top:1px solid #e5e7eb;margin:12px 0;" />
 
 ## 🧭 State Model
 
@@ -116,14 +119,14 @@ Rules:
 - Health/fail‑open: quick probe (~150ms) skips awaiting if the UI is unreachable.
 - Inactivity: no events for 180s → `inactive`.
 
----
+<hr style="border:0;border-top:1px solid #e5e7eb;margin:12px 0;" />
 
 ## 🔒 Security & Privacy
 
 - All hooks run locally; inter‑process communication is over a local WebSocket/HTTP on 127.0.0.1:4100.
 - Note: the local port 4100 endpoint is unauthenticated today; we plan to add authentication/authorization.
 
----
+<hr style="border:0;border-top:1px solid #e5e7eb;margin:12px 0;" />
 
 ## 🔭 Future Work
 
@@ -136,7 +139,7 @@ Rules:
 
 Contributions welcome! Open an issue or PR for ideas, fixes, or features. Or we can discuss in Discord.
 
----
+<hr style="border:0;border-top:1px solid #e5e7eb;margin:12px 0;" />
 
 ## 📄 License
 
