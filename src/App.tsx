@@ -526,18 +526,28 @@ function App() {
     };
 
     const onVis = () => {
-      if (document.hidden) stopRaf();
+      // Only spin the orbit when expanded and visible.
+      if (document.hidden || !expandedRef.current) stopRaf();
       else startRaf();
     };
 
     document.addEventListener('visibilitychange', onVis);
-    if (!document.hidden) startRaf();
+    // Initial start: only when expanded.
+    if (!document.hidden && expandedRef.current) startRaf();
 
     return () => {
       document.removeEventListener('visibilitychange', onVis);
       stopRaf();
     };
   }, []);
+
+  // Start/stop orbit animation when expanded toggles.
+  useEffect(() => {
+    // Trigger the visibility handler logic from the effect above.
+    // This keeps the orbit rAF fully off while collapsed.
+    const ev = new Event('visibilitychange');
+    document.dispatchEvent(ev);
+  }, [expanded]);
 
   // Per-session dismissal for inactive avatars (not persisted).
   const [dismissedInactiveKeys, setDismissedInactiveKeys] = useState<Set<AgentKey>>(() => new Set());

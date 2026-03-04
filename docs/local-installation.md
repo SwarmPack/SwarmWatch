@@ -53,6 +53,30 @@ SwarmWatch installs per‑user and does not require admin rights.
 - Linux: `${XDG_DATA_HOME:-~/.local/share}/SwarmWatch/bin/`
 - Windows: `%LOCALAPPDATA%\SwarmWatch\bin\`
 
+### Windows: where is the app installed?
+
+The current Windows installer script installs **both** executables here:
+
+- App: `%LOCALAPPDATA%\SwarmWatch\swarmwatch.exe`
+- Runner sidecar (used by IDE hooks): `%LOCALAPPDATA%\SwarmWatch\swarmwatch-runner.exe`
+
+At runtime, when you enable integrations in the SwarmWatch UI, it will copy the runner into:
+
+- Runner (stable per-user hook path): `%LOCALAPPDATA%\SwarmWatch\bin\swarmwatch-runner.exe`
+
+and then create per-IDE shims next to it (e.g. `vscode-hook.exe`, `cline-hook.exe`) which are what the IDE hook configs execute.
+
+### Windows: taskbar / quitting
+
+On Windows, SwarmWatch uses a tiny frameless always-on-top window. If you set `skipTaskbar: true`, Windows will not show it on the taskbar.
+
+SwarmWatch now provides a **system tray icon** with a menu:
+- Show
+- Hide
+- Quit
+
+So users don’t need to kill the process in Task Manager.
+
 ## Enabling integrations
 
 Use the SwarmWatch UI → Settings. Avoid manual edits unless debugging; the app manages absolute hook shim paths and agent‑specific schemas for you.

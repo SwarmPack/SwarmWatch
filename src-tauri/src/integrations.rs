@@ -722,13 +722,79 @@ pub fn install_runner() -> Result<PathBuf, String> {
 
     #[cfg(windows)]
     {
-        // In dev builds from non-Windows hosts we can't generate a real Windows runner.
-        // On Windows, the packaged app provides the sidecar exe.
-        if !runner.exists() {
-            fs::write(&runner, "")
-                .map_err(|e| format!("write {} failed: {e}", runner.display()))?;
+        // On Windows, we MUST install a real executable.
+        // Writing a placeholder file causes VS Code/Cline to show:
+        //   "This app can't run on your PC"
+        // when the hook is executed.
+
+        fn is_valid_exe(p: &Path) -> bool {
+            if !p.exists() {
+                return false;
+            }
+            // Best-effort sanity: non-empty and starts with "MZ".
+            let Ok(bytes) = std::fs::read(p) else {
+                return false;
+            };
+            bytes.len() > 2 && bytes[0] == b'M' && bytes[1] == b'Z'
         }
-        return Ok(runner);
+
+        // If already installed and looks valid, keep it.
+        if is_valid_exe(&runner) {
+            return Ok(runner);
+        }
+
+        // Locate a packaged runner adjacent to the running app executable.
+        // For our Windows zip distribution, we ship:
+        //   %LOCALAPPDATA%\SwarmWatch\swarmwatch.exe
+        //   %LOCALAPPDATA%\SwarmWatch\swarmwatch-runner.exe
+        // Then we copy runner into:
+        //   %LOCALAPPDATA%\SwarmWatch\bin\swarmwatch-runner.exe
+        let exe_dir = std::env::current_exe()
+            .map_err(|e| format!("current_exe failed: {e}"))?
+            .parent()
+            .map(|p| p.to_path_buf())
+            .ok_or_else(|| "current_exe has no parent".to_string())?;
+
+        let candidates = [
+            exe_dir.join("swarmwatch-runner.exe"),
+            // Dev-friendly names (if someone manually extracted artifacts)
+            exe_dir.join("swarmwatch-runner-x86_64-pc-windows-msvc.exe"),
+        ];
+
+        let src = candidates
+            .into_iter()
+            .find(|p| is_valid_exe(p))
+            .ok_or_else(|| {
+                format!(
+                    "Could not locate a valid swarmwatch-runner.exe to install.\n\
+Expected one of the following next to the SwarmWatch app executable:\n\
+  - {}\n\
+  - {}\n\
+\n\
+This usually means the Windows zip installer did not include the runner sidecar.\n\
+Reinstall using the latest release zip that includes swarmwatch-runner.exe.",
+                    candidates[0].display(),
+                    candidates[1].display()
+                )
+            })?;
+
+        fs::copy(&src, &runner).map_err(|e| {
+            format!(
+                "copy {} -> {} failed: {e}",
+                src.display(),
+                runner.display()
+            )
+        })?;
+
+        // Re-check to avoid installing a corrupt/blocked file.
+        if !is_valid_exe(&runner) {
+            return Err(format!(
+                "Installed runner does not look like a valid Windows executable: {}",
+                runner.display()
+            ));
+        }
+
+        Ok(runner)
     }
 
     #[cfg(not(windows))]

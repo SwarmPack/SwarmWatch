@@ -53,22 +53,36 @@ try {
   Info "Extracting…"
   Expand-Archive -Path $zipPath -DestinationPath $outDir -Force
 
-  # Try to locate a .exe in the extracted folder.
-  $exe = Get-ChildItem -Path $outDir -Recurse -Filter "*.exe" | Select-Object -First 1
-  if (-not $exe) {
+  # Locate both the app exe and the runner sidecar exe.
+  # Hooks rely on swarmwatch-runner.exe being present.
+  $appExe = Get-ChildItem -Path $outDir -Recurse -Filter "swarmwatch.exe" | Select-Object -First 1
+  if (-not $appExe) {
+    # Fallback: accept any exe as the app (legacy naming), but prefer swarmwatch.exe.
+    $appExe = Get-ChildItem -Path $outDir -Recurse -Filter "*.exe" | Select-Object -First 1
+  }
+  if (-not $appExe) {
     Die "Could not find SwarmWatch .exe in the archive"
+  }
+
+  $runnerExe = Get-ChildItem -Path $outDir -Recurse -Filter "swarmwatch-runner.exe" | Select-Object -First 1
+  if (-not $runnerExe) {
+    Die "Could not find swarmwatch-runner.exe in the archive (hooks will not work without it)"
   }
 
   # Install dir (user-local)
   $installDir = Join-Path $env:LOCALAPPDATA "SwarmWatch"
   New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 
-  $destExe = Join-Path $installDir $exe.Name
-  Copy-Item -Force -Path $exe.FullName -Destination $destExe
+  $destAppExe = Join-Path $installDir "swarmwatch.exe"
+  Copy-Item -Force -Path $appExe.FullName -Destination $destAppExe
 
-  Ok "Installed: $destExe"
+  $destRunnerExe = Join-Path $installDir "swarmwatch-runner.exe"
+  Copy-Item -Force -Path $runnerExe.FullName -Destination $destRunnerExe
+
+  Ok "Installed: $destAppExe"
+  Ok "Installed: $destRunnerExe"
   Info "Run it by double-clicking, or:"
-  Write-Host "  & '$destExe'"
+  Write-Host "  & '$destAppExe'"
 }
 finally {
   Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue

@@ -169,7 +169,10 @@ jobs:
           # Ship the built exe in a zip (simple, Omni-like). Adjust to MSI later if desired.
           $exe = "src-tauri/target/${{ matrix.rust_target }}/release/swarmwatch.exe"
           if (!(Test-Path $exe)) { throw "swarmwatch.exe not found at $exe" }
-          Compress-Archive -Path $exe -DestinationPath "dist/swarmwatch-${{ matrix.os_name }}-${{ matrix.arch_name }}.zip" -Force
+          # Also include the runner sidecar exe so IDE hooks can execute it.
+          $runner = "src-tauri/target/${{ matrix.rust_target }}/release/swarmwatch-runner.exe"
+          if (!(Test-Path $runner)) { throw "swarmwatch-runner.exe not found at $runner" }
+          Compress-Archive -Path $exe,$runner -DestinationPath "dist/swarmwatch-${{ matrix.os_name }}-${{ matrix.arch_name }}.zip" -Force
 
       - name: Sign release archive
         shell: bash

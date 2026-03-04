@@ -234,6 +234,61 @@ pub fn run() {
                 .get_webview_window("main")
                 .ok_or_else(|| tauri::Error::AssetNotFound("main window".into()))?;
             let _ = window.set_always_on_top(true);
+
+            // Windows UX:
+            // - our window is frameless/tiny, so provide a system tray menu to quit
+            // - otherwise users have to kill the process in Task Manager
+            #[cfg(windows)]
+            {
+                use tauri::menu::{Menu, MenuItem};
+                use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+
+                let show = MenuItem::with_id(app, "show", "Show", true, None::<&str>)?;
+                let hide = MenuItem::with_id(app, "hide", "Hide", true, None::<&str>)?;
+                let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+                let menu = Menu::with_items(app, &[&show, &hide, &quit])?;
+
+                let handle = app.handle().clone();
+                let _tray = TrayIconBuilder::new()
+                    .menu(&menu)
+                    .on_menu_event(move |_tray, event| {
+                        let Some(window) = handle.get_webview_window("main") else {
+                            return;
+                        };
+                        match event.id().as_ref() {
+                            "show" => {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                            "hide" => {
+                                let _ = window.hide();
+                            }
+                            "quit" => {
+                                handle.exit(0);
+                            }
+                            _ => {}
+                        }
+                    })
+                    .on_tray_icon_event(move |_tray, event| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            if let Some(window) = handle.get_webview_window("main") {
+                                let visible = window.is_visible().unwrap_or(true);
+                                if visible {
+                                    let _ = window.hide();
+                                } else {
+                                    let _ = window.show();
+                                    let _ = window.set_focus();
+                                }
+                            }
+                        }
+                    })
+                    .build(app)?;
+            }
             Ok(())
         })
         .run(tauri::generate_context!())
