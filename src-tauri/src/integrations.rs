@@ -762,8 +762,9 @@ pub fn install_runner() -> Result<PathBuf, String> {
         ];
 
         let src = candidates
-            .into_iter()
+            .iter()
             .find(|p| is_valid_exe(p))
+            .cloned()
             .ok_or_else(|| {
                 format!(
                     "Could not locate a valid swarmwatch-runner.exe to install.\n\

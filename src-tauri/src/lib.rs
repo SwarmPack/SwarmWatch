@@ -251,7 +251,7 @@ pub fn run() {
                 let handle = app.handle().clone();
                 let _tray = TrayIconBuilder::new()
                     .menu(&menu)
-                    .on_menu_event(move |_tray, event| {
+                    .on_menu_event(move |_tray, event: tauri::menu::MenuEvent| {
                         let Some(window) = handle.get_webview_window("main") else {
                             return;
                         };
