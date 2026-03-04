@@ -249,10 +249,13 @@ pub fn run() {
                 let menu = Menu::with_items(app, &[&show, &hide, &quit])?;
 
                 let handle = app.handle().clone();
+                // AppHandle is moved into closures; keep separate clones for each callback.
+                let handle_menu = handle.clone();
+                let handle_tray_click = handle.clone();
                 let _tray = TrayIconBuilder::new()
                     .menu(&menu)
                     .on_menu_event(move |_tray, event: tauri::menu::MenuEvent| {
-                        let Some(window) = handle.get_webview_window("main") else {
+                        let Some(window) = handle_menu.get_webview_window("main") else {
                             return;
                         };
                         match event.id().as_ref() {
@@ -264,7 +267,7 @@ pub fn run() {
                                 let _ = window.hide();
                             }
                             "quit" => {
-                                handle.exit(0);
+                                handle_menu.exit(0);
                             }
                             _ => {}
                         }
@@ -276,7 +279,7 @@ pub fn run() {
                             ..
                         } = event
                         {
-                            if let Some(window) = handle.get_webview_window("main") {
+                            if let Some(window) = handle_tray_click.get_webview_window("main") {
                                 let visible = window.is_visible().unwrap_or(true);
                                 if visible {
                                     let _ = window.hide();
