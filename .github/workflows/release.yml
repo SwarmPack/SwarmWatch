@@ -99,9 +99,8 @@ jobs:
         shell: bash
         run: npm ci
 
-      - name: Build frontend
-        shell: bash
-        run: npm run build
+      # NOTE: frontend build is run by Tauri via `src-tauri/tauri.conf.json` -> build.beforeBuildCommand.
+      # Do not duplicate it here, otherwise CI runs `npm run build` twice.
 
       - name: Ensure Cargo.lock exists
         shell: bash
