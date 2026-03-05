@@ -967,32 +967,40 @@ body,
 
 .updateBanner {
   position: absolute;
-  top: 10px;
-  left: 10px;
-  right: 10px;
+  /* Centered + smaller so it doesn't crowd the orbit */
+  top: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 240px;
+  max-width: calc(100% - 32px);
   z-index: 50;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 10px 10px;
+  padding: 8px 10px;
   border-radius: 12px;
   background: rgba(20, 20, 20, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(10px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.38);
 }
 
 .updateBannerTitle {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1.1;
 }
 
 .updateBannerSub {
   margin-top: 2px;
-  font-size: 12px;
+  font-size: 11px;
   opacity: 0.9;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .updateBannerRight {
@@ -1002,13 +1010,15 @@ body,
 }
 
 .updateBannerRight button {
-  height: 28px;
-  padding: 0 10px;
+  height: 30px;
+  padding: 0 12px;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.92);
   cursor: pointer;
+  font-size: 11px;
+  font-weight: 650;
 }
 
 .updateBannerRight button:hover {
@@ -1020,6 +1030,11 @@ body,
   padding: 0;
   font-size: 16px;
   line-height: 1;
+}
+
+.updateBanner.updateBannerError {
+  border-color: rgba(255, 120, 120, 0.25);
+  background: rgba(45, 20, 20, 0.92);
 }
 
 .overflowRow {

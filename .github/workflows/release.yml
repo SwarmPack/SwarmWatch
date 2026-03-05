@@ -145,8 +145,16 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          tar -czf "dist/swarmwatch-${{ matrix.os_name }}-${{ matrix.arch_name }}.tar.gz" \
-            -C "src-tauri/target/${{ matrix.rust_target }}/release/bundle/macos" "SwarmWatch.app"
+          # Publish updater-native artifact produced by `createUpdaterArtifacts`.
+          # Expected output: SwarmWatch.app.tar.gz (+ .sig)
+          BUNDLE_DIR="src-tauri/target/${{ matrix.rust_target }}/release/bundle/macos"
+          UPDATER_TGZ=$(find "$BUNDLE_DIR" -maxdepth 1 -name "*.app.tar.gz" | head -1)
+          if [ -z "$UPDATER_TGZ" ]; then
+            echo "No .app.tar.gz found in $BUNDLE_DIR" >&2
+            ls -la "$BUNDLE_DIR" || true
+            exit 1
+          fi
+          cp "$UPDATER_TGZ" "dist/swarmwatch-${{ matrix.os_name }}-${{ matrix.arch_name }}.app.tar.gz"
 
       - name: Package release (Linux)
         if: matrix.os_name == 'linux'
@@ -154,25 +162,43 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          APPIMAGE=$(find "src-tauri/target/${{ matrix.rust_target }}/release/bundle/" -name "*.AppImage" | head -1)
+          # Publish updater-native artifact: raw AppImage (+ .sig)
+          BUNDLE_DIR="src-tauri/target/${{ matrix.rust_target }}/release/bundle/appimage"
+          APPIMAGE=$(find "$BUNDLE_DIR" -maxdepth 1 -name "*.AppImage" | head -1)
           if [ -z "$APPIMAGE" ]; then
-            echo "No AppImage found" >&2
+            echo "No AppImage found in $BUNDLE_DIR" >&2
+            ls -la "$BUNDLE_DIR" || true
             exit 1
           fi
-          tar -czf "dist/swarmwatch-${{ matrix.os_name }}-${{ matrix.arch_name }}.tar.gz" -C "$(dirname "$APPIMAGE")" "$(basename "$APPIMAGE")"
+          cp "$APPIMAGE" "dist/swarmwatch-${{ matrix.os_name }}-${{ matrix.arch_name }}.AppImage"
 
       - name: Package release (Windows)
         if: matrix.os_name == 'windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          # Ship the built exe in a zip (simple, Omni-like). Adjust to MSI later if desired.
-          $exe = "src-tauri/target/${{ matrix.rust_target }}/release/swarmwatch.exe"
-          if (!(Test-Path $exe)) { throw "swarmwatch.exe not found at $exe" }
-          # Also include the runner sidecar exe so IDE hooks can execute it.
-          $runner = "src-tauri/target/${{ matrix.rust_target }}/release/swarmwatch-runner.exe"
-          if (!(Test-Path $runner)) { throw "swarmwatch-runner.exe not found at $runner" }
-          Compress-Archive -Path $exe,$runner -DestinationPath "dist/swarmwatch-${{ matrix.os_name }}-${{ matrix.arch_name }}.zip" -Force
+          # IMPORTANT: Tauri updater on Windows expects an installer artifact (NSIS/MSI),
+          # not a portable zip. If we publish only a zip, in-app update may download but
+          # not actually install/replace the running app.
+          #
+          # So we publish the bundle installer produced by `tauri build`.
+          $bundleRoot = "src-tauri/target/${{ matrix.rust_target }}/release/bundle"
+          if (!(Test-Path $bundleRoot)) { throw "bundle output not found at $bundleRoot" }
+
+          # Prefer MSI if present, otherwise fall back to NSIS setup exe.
+          $msi = Get-ChildItem -Path $bundleRoot -Recurse -Filter "*.msi" | Select-Object -First 1
+          if ($msi) {
+            Copy-Item -Force -Path $msi.FullName -Destination "dist/swarmwatch-windows-x64.msi"
+            Write-Host "Packaged MSI: $($msi.FullName)"
+            exit 0
+          }
+
+          $nsis = Get-ChildItem -Path $bundleRoot -Recurse -Filter "*.exe" |
+            Where-Object { $_.FullName -match "\\\\nsis\\\\" -and $_.Name -match "setup" } |
+            Select-Object -First 1
+          if (-not $nsis) { throw "No Windows installer found under $bundleRoot (expected NSIS setup exe or MSI)" }
+          Copy-Item -Force -Path $nsis.FullName -Destination "dist/swarmwatch-windows-x64-setup.exe"
+          Write-Host "Packaged NSIS: $($nsis.FullName)"
 
       - name: Sign release archive
         shell: bash
@@ -240,10 +266,28 @@ jobs:
             fi
           }
 
-          add_platform "darwin-aarch64" "swarmwatch-macos-arm64.tar.gz"
-          add_platform "darwin-x86_64" "swarmwatch-macos-x64.tar.gz"
-          add_platform "linux-x86_64" "swarmwatch-linux-x64.tar.gz"
-          add_platform "windows-x86_64" "swarmwatch-windows-x64.zip"
+          add_platform "darwin-aarch64" "swarmwatch-macos-arm64.app.tar.gz"
+          add_platform "darwin-x86_64" "swarmwatch-macos-x64.app.tar.gz"
+          add_platform "linux-x86_64" "swarmwatch-linux-x64.AppImage"
+          # Windows: prefer MSI, otherwise NSIS setup exe.
+          if [ -f "artifacts/swarmwatch-windows-x64.msi.sig" ]; then
+            add_platform "windows-x86_64" "swarmwatch-windows-x64.msi"
+          else
+            add_platform "windows-x86_64" "swarmwatch-windows-x64-setup.exe"
+          fi
+
+          # Hard fail if any platform is missing. Silent skipping makes updates look broken.
+          missing=0
+          for key in "darwin-aarch64" "darwin-x86_64" "linux-x86_64" "windows-x86_64"; do
+            if ! echo "$PLATFORMS" | grep -q "\"$key\""; then
+              echo "Missing platform entry in latest.json: $key" >&2
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "Refusing to publish latest.json: missing platforms (see above)." >&2
+            exit 1
+          fi
 
           cat > latest.json << EOF
           {

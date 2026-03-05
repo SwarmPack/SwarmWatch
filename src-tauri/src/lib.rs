@@ -7,6 +7,16 @@ pub mod settings;
 
 use tauri::Manager;
 
+/// Restart the application (best-effort) after an updater install.
+///
+/// We implement this in Rust to avoid JS API/plugin mismatches across Tauri v2
+/// versions. This will start a new instance and exit the current process.
+#[tauri::command]
+fn app_restart(app: tauri::AppHandle) {
+    // `restart()` never returns.
+    app.restart();
+}
+
 #[tauri::command]
 fn open_context(agent_family: String, raw: serde_json::Value) -> Result<(), String> {
     use std::process::Command;
@@ -210,6 +220,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             greet,
+            app_restart,
             integrations_status,
             integrations_enable,
             integrations_disable,

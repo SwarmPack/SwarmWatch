@@ -201,6 +201,7 @@ function App() {
   });
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' });
   const updateCheckedRef = useRef(false);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
 
   async function checkForUpdatesOnce() {
     if (updateCheckedRef.current) return;
@@ -219,8 +220,18 @@ function App() {
         setUpdateStatus({ state: 'idle' });
       }
     } catch (e: any) {
-      // Fail silent (no banner). If you want debug, open console.
       setUpdateStatus({ state: 'error', message: String(e?.message ?? e) });
+    }
+  }
+
+  async function loadAppVersionOnce() {
+    if (!isTauriRuntime()) return;
+    try {
+      const { getVersion } = await import('@tauri-apps/api/app');
+      const v = await getVersion();
+      setAppVersion(v);
+    } catch {
+      // ignore (web preview)
     }
   }
 
@@ -245,7 +256,14 @@ function App() {
 
       setUpdateStatus({ state: 'ready' });
 
-      // Restart is handled by Tauri updater on install; no explicit relaunch needed.
+      // Ensure the new version is actually running.
+      // Use a Rust command to avoid JS API/plugin mismatches.
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke('app_restart');
+      } catch {
+        // Best-effort: user can manually relaunch.
+      }
     } catch (e: any) {
       setUpdateStatus({ state: 'error', message: String(e?.message ?? e) });
     }
@@ -453,6 +471,7 @@ function App() {
   useEffect(() => {
     if (!expanded) return;
     if (updateDismissed) return;
+    void loadAppVersionOnce();
     void checkForUpdatesOnce();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expanded, updateDismissed]);
@@ -1279,7 +1298,8 @@ function App() {
                 <div className="updateBannerLeft">
                   <div className="updateBannerTitle">Update available</div>
                   <div className="updateBannerSub">
-                    {updateStatus.version ? `Version ${updateStatus.version} is ready.` : 'A new version is ready.'}
+                    {updateStatus.version ? `New: ${updateStatus.version}` : 'A new version is ready.'}
+                    {appVersion ? ` · Current: ${appVersion}` : ''}
                   </div>
                 </div>
                 <div className="updateBannerRight">
@@ -1320,6 +1340,48 @@ function App() {
                   </div>
                 </div>
                 <div className="updateBannerRight">
+                  <button
+                    type="button"
+                    className="updateBannerClose"
+                    aria-label="Dismiss update banner"
+                    onClick={() => {
+                      setUpdateDismissed(true);
+                      try {
+                        localStorage.setItem(UPDATE_DISMISS_KEY, '1');
+                      } catch {
+                        // ignore
+                      }
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {!updateDismissed && updateStatus.state === 'error' ? (
+              <div
+                className="updateBanner updateBannerError"
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                <div className="updateBannerLeft">
+                  <div className="updateBannerTitle">Update failed</div>
+                  <div className="updateBannerSub" title={updateStatus.message}>
+                    {updateStatus.message}
+                  </div>
+                </div>
+                <div className="updateBannerRight">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Allow retry.
+                      updateCheckedRef.current = false;
+                      void checkForUpdatesOnce();
+                    }}
+                  >
+                    Retry
+                  </button>
                   <button
                     type="button"
                     className="updateBannerClose"

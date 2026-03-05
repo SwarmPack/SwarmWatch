@@ -43,7 +43,12 @@ need_cmd() {
 }
 
 need_cmd curl
-need_cmd tar
+need_cmd chmod
+
+# tar is only needed for macOS updater archive.
+if [[ "$(uname -s | tr '[:upper:]' '[:lower:]')" == "darwin" ]]; then
+  need_cmd tar
+fi
 
 info "SwarmWatch installer"
 
@@ -56,14 +61,14 @@ asset=""
 case "$OS" in
   darwin)
     case "$ARCH" in
-      arm64) asset="swarmwatch-macos-arm64.tar.gz" ;;
-      x86_64) asset="swarmwatch-macos-x64.tar.gz" ;;
+      arm64) asset="swarmwatch-macos-arm64.app.tar.gz" ;;
+      x86_64) asset="swarmwatch-macos-x64.app.tar.gz" ;;
       *) die "unsupported mac arch: $ARCH" ;;
     esac
     ;;
   linux)
     case "$ARCH" in
-      x86_64|amd64) asset="swarmwatch-linux-x64.tar.gz" ;;
+      x86_64|amd64) asset="swarmwatch-linux-x64.AppImage" ;;
       *) die "unsupported linux arch: $ARCH (only x64 supported in CI right now)" ;;
     esac
     ;;
@@ -77,10 +82,10 @@ info "Downloading latest release…"
 
 curl -fL "$url" -o "$tmpdir/$asset"
 
-info "Extracting…"
-tar -xzf "$tmpdir/$asset" -C "$tmpdir"
-
 if [[ "$OS" == "darwin" ]]; then
+  info "Extracting…"
+  tar -xzf "$tmpdir/$asset" -C "$tmpdir"
+
   # Expect SwarmWatch.app in the tarball.
   app_path="$(find "$tmpdir" -maxdepth 3 -name 'SwarmWatch.app' -print -quit)"
   [[ -n "$app_path" ]] || die "SwarmWatch.app not found in archive"
@@ -100,9 +105,9 @@ if [[ "$OS" == "darwin" ]]; then
 
   ok "Installed. Open SwarmWatch from /Applications."
 else
-  # Linux: expect an AppImage.
-  appimage="$(find "$tmpdir" -maxdepth 3 -type f -name '*.AppImage' -print -quit)"
-  [[ -n "$appimage" ]] || die "AppImage not found in archive"
+  # Linux: artifact is a raw AppImage (no extraction).
+  appimage="$tmpdir/$asset"
+  [[ -f "$appimage" ]] || die "AppImage not found: $appimage"
 
   install_dir="${XDG_DATA_HOME:-$HOME/.local/share}/SwarmWatch"
   mkdir -p "$install_dir"

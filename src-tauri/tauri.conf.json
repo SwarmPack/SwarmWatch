@@ -33,6 +33,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "externalBin": [
       "binaries/swarmwatch-runner"
     ],
