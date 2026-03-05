@@ -127,6 +127,14 @@ function App() {
 
   const DRAG_THRESHOLD_PX = 18;
 
+  // Drag move coalescing: pointermove can fire very fast; if we `await setPosition`
+  // per event, we get many concurrent async calls which complete out-of-order.
+  // That feels like flicker/jumping. So we coalesce to at most 1 window move per frame.
+  const dragPendingPosRef = useRef<{ x: number; y: number } | null>(null);
+  const dragSetPosInFlightRef = useRef<boolean>(false);
+  const expandFallbackTimerRef = useRef<number | null>(null);
+  const dragLoopScheduledRef = useRef<boolean>(false);
+
   // Pointer-based drag: only start OS-level dragging once the pointer moved
   // a small threshold, so a normal click still toggles expanded mode.
   const pointerRef = useRef<{
@@ -989,6 +997,7 @@ function App() {
   const manualDragRef = useRef<{
     enabled: boolean;
     ready: boolean;
+    didDrag: boolean;
     winStartX: number;
     winStartY: number;
     ptrStartX: number;
@@ -1003,12 +1012,22 @@ function App() {
     if (!api) return;
     windowApiRef.current = api;
 
+    // While dragging, ensure the window is interactive (not click-through), otherwise
+    // losing hover can flip ignoreCursorEvents mid-drag.
+    try {
+      await api.getCurrentWindow().setIgnoreCursorEvents(false as any);
+      collapsedClickThroughRef.current = false;
+    } catch {
+      // ignore
+    }
+
     // Seed immediately so pointer moves can start being processed without waiting
     // for async window queries.
     const seedPos = lastCollapsedPosRef.current;
     manualDragRef.current = {
       enabled: true,
       ready: true,
+      didDrag: false,
       winStartX: seedPos?.x ?? 0,
       winStartY: seedPos?.y ?? 0,
       ptrStartX: e.screenX,
@@ -1041,6 +1060,13 @@ function App() {
     if (dist < DRAG_THRESHOLD_PX) return;
 
     pointerRef.current.didDrag = true;
+    st.didDrag = true;
+
+    // Cancel the 80ms expand fallback once we have a real drag.
+    if (expandFallbackTimerRef.current) {
+      window.clearTimeout(expandFallbackTimerRef.current);
+      expandFallbackTimerRef.current = null;
+    }
 
     const api = windowApiRef.current ?? (await tryLoadWindowApi());
     if (!api) return;
@@ -1050,21 +1076,74 @@ function App() {
     const x = Math.round(st.winStartX + dx * sf);
     const y = Math.round(st.winStartY + dy * sf);
 
+    // Deterministic coalescing: keep only latest position, and run a single async loop
+    // that applies updates in-order (never concurrent setPosition calls).
+    dragPendingPosRef.current = { x, y };
+
+    const scheduleLoop = () => {
+      if (dragLoopScheduledRef.current) return;
+      dragLoopScheduledRef.current = true;
+      window.requestAnimationFrame(() => {
+        dragLoopScheduledRef.current = false;
+        void flushPendingDragPos(api);
+      });
+    };
+
+    scheduleLoop();
+  }
+
+  async function flushPendingDragPos(api: WindowApi) {
+    if (dragSetPosInFlightRef.current) return;
+    const pending = dragPendingPosRef.current;
+    if (!pending) return;
+
+    dragSetPosInFlightRef.current = true;
     try {
-      await api.getCurrentWindow().setPosition(new api.PhysicalPosition(x, y));
-      lastCollapsedPosRef.current = { x, y };
+      // Apply the latest pending position
+      await api.getCurrentWindow().setPosition(new api.PhysicalPosition(pending.x, pending.y));
+      lastCollapsedPosRef.current = { x: pending.x, y: pending.y };
       try {
-        localStorage.setItem(POS_KEY, JSON.stringify({ x, y }));
+        localStorage.setItem(POS_KEY, JSON.stringify({ x: pending.x, y: pending.y }));
       } catch {
         // ignore
       }
     } catch (err) {
       console.error('[window.manualDrag]', err);
+    } finally {
+      dragSetPosInFlightRef.current = false;
+    }
+
+    // If pointer moves happened while we were awaiting, there may be a newer target.
+    const next = dragPendingPosRef.current;
+    if (next && (next.x !== pending.x || next.y !== pending.y)) {
+      // Schedule another frame to apply the newest.
+      if (!dragLoopScheduledRef.current) {
+        dragLoopScheduledRef.current = true;
+        window.requestAnimationFrame(() => {
+          dragLoopScheduledRef.current = false;
+          void flushPendingDragPos(api);
+        });
+      }
     }
   }
 
   function endManualDrag() {
     if (manualDragRef.current) manualDragRef.current.enabled = false;
+    // Stop any scheduled position updates.
+    dragLoopScheduledRef.current = false;
+    dragPendingPosRef.current = null;
+    dragSetPosInFlightRef.current = false;
+  }
+
+  function onPointerCancel() {
+    if (expanded) return;
+    if (expandFallbackTimerRef.current) {
+      window.clearTimeout(expandFallbackTimerRef.current);
+      expandFallbackTimerRef.current = null;
+    }
+    endManualDrag();
+    pointerRef.current.isDown = false;
+    pointerRef.current.didDrag = false;
   }
 
   // After a drag ends in collapsed mode, clamp the window to the visible work area
@@ -1166,10 +1245,10 @@ function App() {
 
     // Fallback: if not dragged shortly after press, expand.
     if (!expanded) {
-      const id = window.setTimeout(() => {
+      if (expandFallbackTimerRef.current) window.clearTimeout(expandFallbackTimerRef.current);
+      expandFallbackTimerRef.current = window.setTimeout(() => {
         if (!expandedRef.current && !pointerRef.current.didDrag) setExpanded(true);
       }, 80);
-      (e.currentTarget as any).__expandTimer = id;
     }
   }
 
@@ -1178,6 +1257,11 @@ function App() {
     const s = pointerRef.current;
     s.isDown = false;
 
+    if (expandFallbackTimerRef.current) {
+      window.clearTimeout(expandFallbackTimerRef.current);
+      expandFallbackTimerRef.current = null;
+    }
+
     endManualDrag();
 
     if (s.didDrag) {
@@ -1185,6 +1269,18 @@ function App() {
       // Clamp to the visible work area and persist the exact drop position.
       void finalizeCollapsedDrop();
       s.didDrag = false;
+
+      // Restore click-through after drag ends.
+      void (async () => {
+        try {
+          const api = windowApiRef.current ?? (await tryLoadWindowApi());
+          if (!api) return;
+          await api.getCurrentWindow().setIgnoreCursorEvents(true as any);
+          collapsedClickThroughRef.current = true;
+        } catch {
+          // ignore
+        }
+      })();
       return;
     }
 
@@ -1237,9 +1333,12 @@ function App() {
           void moveManualDrag(e);
         }}
         onPointerUp={onPointerUp}
+        onPointerCancel={onPointerCancel}
         onMouseEnter={async () => {
           // While collapsed, disable click-through so the bubble is interactive.
           if (expanded) return;
+          // If we're actively dragging, ignore hover toggles.
+          if (manualDragRef.current?.enabled) return;
           try {
             const api = windowApiRef.current ?? (await tryLoadWindowApi());
             if (!api) return;
@@ -1252,6 +1351,8 @@ function App() {
         onMouseLeave={async () => {
           // Restore click-through outside the bubble while collapsed.
           if (expanded) return;
+          // If we're actively dragging, ignore hover toggles.
+          if (manualDragRef.current?.enabled) return;
           try {
             const api = windowApiRef.current ?? (await tryLoadWindowApi());
             if (!api) return;
