@@ -136,6 +136,10 @@ jobs:
         env:
           # Needed because tauri.conf.json uses $env:SWARM_UPDATER_PUBKEY
           SWARM_UPDATER_PUBKEY: ${{ secrets.SWARM_UPDATER_PUBKEY }}
+          # REQUIRED for `bundle.createUpdaterArtifacts`: tauri build signs updater bundles
+          # using these exact env var names.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.SWARM_TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.SWARM_TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           npx tauri build --target ${{ matrix.rust_target }}
 
@@ -207,7 +211,9 @@ jobs:
           SWARM_TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.SWARM_TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          ARCHIVE=$(ls dist/swarmwatch-${{ matrix.os_name }}-${{ matrix.arch_name }}.*)
+          # Include NSIS fallback: swarmwatch-windows-x64-setup.exe
+          # Also ensure we don't accidentally pick up the .sig.
+          ARCHIVE=$(ls dist/swarmwatch-${{ matrix.os_name }}-${{ matrix.arch_name }}* | grep -v '\.sig$' | head -1)
           npx tauri signer sign "$ARCHIVE" \
             --private-key "$SWARM_TAURI_SIGNING_PRIVATE_KEY" \
             --password "$SWARM_TAURI_SIGNING_PRIVATE_KEY_PASSWORD"
@@ -217,7 +223,7 @@ jobs:
         with:
           name: swarmwatch-${{ matrix.os_name }}-${{ matrix.arch_name }}
           path: |
-            dist/swarmwatch-${{ matrix.os_name }}-${{ matrix.arch_name }}.*
+            dist/swarmwatch-${{ matrix.os_name }}-${{ matrix.arch_name }}*
 
       - name: Publish to GitHub Release
         uses: softprops/action-gh-release@v2
@@ -226,7 +232,7 @@ jobs:
           generate_release_notes: false
           body_path: release_body.txt
           files: |
-            dist/swarmwatch-${{ matrix.os_name }}-${{ matrix.arch_name }}.*
+            dist/swarmwatch-${{ matrix.os_name }}-${{ matrix.arch_name }}*
 
   publish-update-json:
     needs: [build-and-release]
