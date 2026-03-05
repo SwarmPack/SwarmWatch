@@ -131,6 +131,26 @@ jobs:
             chmod +x "src-tauri/binaries/swarmwatch-runner-${{ matrix.rust_target }}" || true
           fi
 
+      - name: Inject updater pubkey into tauri.conf.json (CI)
+        shell: bash
+        env:
+          SWARM_UPDATER_PUBKEY: ${{ secrets.SWARM_UPDATER_PUBKEY }}
+        run: |
+          set -euo pipefail
+          # Tauri v2 does not reliably expand "$env:..." placeholders inside tauri.conf.json
+          # for the updater pubkey during bundling. If it doesn't expand, tauri tries to
+          # base64-decode the literal string "$env:SWARM_UPDATER_PUBKEY" and fails.
+          #
+          # So we write the real pubkey directly into the build-time config.
+          PUBKEY_CLEAN=$(printf "%s" "$SWARM_UPDATER_PUBKEY" | tr -d '\r\n')
+          if [ -z "$PUBKEY_CLEAN" ]; then
+            echo "SWARM_UPDATER_PUBKEY is empty" >&2
+            exit 1
+          fi
+          jq --arg k "$PUBKEY_CLEAN" '.plugins.updater.pubkey = $k' src-tauri/tauri.conf.json > src-tauri/tauri.conf.json.tmp
+          mv src-tauri/tauri.conf.json.tmp src-tauri/tauri.conf.json
+          echo "Injected updater pubkey into src-tauri/tauri.conf.json"
+
       - name: Build Tauri app
         shell: bash
         env:
