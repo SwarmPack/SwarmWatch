@@ -12,8 +12,9 @@ SwarmWatch is an activity monitor and control plane for AI coding swarms. It sho
 ## 🎬 Demo
 
 <p align="center">
-	<img src="public/SwarmIMovie.gif" alt="SwarmWatch demo" width="720" />
-  
+	<video src="public/SwarmWatchDemo.mp4" width="720" controls playsinline muted loop>
+		<a href="public/SwarmWatchDemo.mp4">Watch the demo video</a>
+	</video>
 </p>
 
 <hr style="border:0;border-top:1px solid #e5e7eb;margin:12px 0;" />
