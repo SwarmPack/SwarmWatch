@@ -4,6 +4,7 @@
 .omni/*
 .vscode/*
 .idea/*
+.github/hooks/*
 # Logs
 logs
 *.log

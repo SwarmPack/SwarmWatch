@@ -20,8 +20,7 @@ body,
 }
 
 .overlayRoot.collapsed {
-  justify-content: flex-start;
-  align-items: flex-start;
+  /* Keep centered in both states to prevent diagonal jump on expand */
   /* In collapsed mode, let clicks pass through outside the bubble */
   pointer-events: none;
 }

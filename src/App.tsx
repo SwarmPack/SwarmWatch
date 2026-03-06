@@ -656,13 +656,14 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orbitVisible.join('|')]);
 
-  // Close the expanded view automatically when focus is lost (user clicks outside the app).
-  useEffect(() => {
-    if (!expanded) return;
-    const onBlur = () => setExpanded(false);
-    window.addEventListener('blur', onBlur);
-    return () => window.removeEventListener('blur', onBlur);
-  }, [expanded]);
+  // Removed: auto-close on window blur (caused flicker/instant close on some clicks)
+  // Users can close by clicking the empty background or the center.
+  // useEffect(() => {
+  //   if (!expanded) return;
+  //   const onBlur = () => setExpanded(false);
+  //   window.addEventListener('blur', onBlur);
+  //   return () => window.removeEventListener('blur', onBlur);
+  // }, [expanded]);
 
   useEffect(() => {
     let cancelled = false;
@@ -991,11 +992,11 @@ function App() {
   const orbitN = Math.max(1, orbitVisible.length);
 
 
-  // Manual dragging fallback for the collapsed bubble.
-  // This avoids platform quirks where `startDragging()` only works in certain
-  // contexts, and it also prevents click-to-expand from being flaky.
+  // Manual dragging for the collapsed bubble.
+  // NOTE: Only enable real dragging AFTER the pointer moves past a threshold.
+  // This prevents accidental window movement and click-to-expand flicker.
   const manualDragRef = useRef<{
-    enabled: boolean;
+    enabled: boolean; // actively dragging
     ready: boolean;
     didDrag: boolean;
     winStartX: number;
@@ -1011,22 +1012,12 @@ function App() {
     const api = windowApiRef.current ?? (await tryLoadWindowApi());
     if (!api) return;
     windowApiRef.current = api;
-
-    // While dragging, ensure the window is interactive (not click-through), otherwise
-    // losing hover can flip ignoreCursorEvents mid-drag.
-    try {
-      await api.getCurrentWindow().setIgnoreCursorEvents(false as any);
-      collapsedClickThroughRef.current = false;
-    } catch {
-      // ignore
-    }
-
-    // Seed immediately so pointer moves can start being processed without waiting
-    // for async window queries.
+    // Do NOT enable drag yet. Just record the pointer start; we will enable
+    // real dragging in moveManualDrag once the threshold is exceeded.
     const seedPos = lastCollapsedPosRef.current;
     manualDragRef.current = {
-      enabled: true,
-      ready: true,
+      enabled: false, // wait until threshold crossed
+      ready: Boolean(seedPos),
       didDrag: false,
       winStartX: seedPos?.x ?? 0,
       winStartY: seedPos?.y ?? 0,
@@ -1034,29 +1025,50 @@ function App() {
       ptrStartY: e.screenY,
       scaleFactor: scaleFactorRef.current || 1
     };
-
-    // If we don't have a saved starting position yet, query it once.
+    // Lazy-init window position if needed, but don't block the gesture.
     if (!seedPos) {
-      const win = api.getCurrentWindow();
-      const pos = await win.outerPosition();
-      const sf = await win.scaleFactor();
-      scaleFactorRef.current = sf;
-      if (manualDragRef.current?.enabled) {
-        manualDragRef.current.winStartX = pos.x;
-        manualDragRef.current.winStartY = pos.y;
-        manualDragRef.current.scaleFactor = sf;
-      }
+      (async () => {
+        try {
+          const win = api.getCurrentWindow();
+          const pos = await win.outerPosition();
+          const sf = await win.scaleFactor();
+          scaleFactorRef.current = sf;
+          if (manualDragRef.current && !manualDragRef.current.ready) {
+            manualDragRef.current.winStartX = pos.x;
+            manualDragRef.current.winStartY = pos.y;
+            manualDragRef.current.scaleFactor = sf;
+            manualDragRef.current.ready = true;
+          }
+        } catch {
+          // ignore
+        }
+      })();
     }
   }
 
   async function moveManualDrag(e: React.PointerEvent) {
     if (expanded) return;
+    // Only react to movement while the current pointer is actively pressed.
+    if (!pointerRef.current.isDown) return;
     const st = manualDragRef.current;
-    if (!st?.enabled || !st.ready) return;
+    if (!st?.ready) return;
 
     const dx = e.screenX - st.ptrStartX;
     const dy = e.screenY - st.ptrStartY;
     const dist = Math.hypot(dx, dy);
+    // If not yet enabled and we crossed the threshold, arm dragging now.
+    if (!st.enabled && dist >= DRAG_THRESHOLD_PX) {
+      try {
+        const api = windowApiRef.current ?? (await tryLoadWindowApi());
+        if (api) {
+          await api.getCurrentWindow().setIgnoreCursorEvents(false as any);
+          collapsedClickThroughRef.current = false;
+        }
+      } catch {
+        // ignore
+      }
+      st.enabled = true;
+    }
     if (dist < DRAG_THRESHOLD_PX) return;
 
     pointerRef.current.didDrag = true;
@@ -1133,6 +1145,8 @@ function App() {
     dragLoopScheduledRef.current = false;
     dragPendingPosRef.current = null;
     dragSetPosInFlightRef.current = false;
+    // Clear state so later hovers can't reuse stale pointer starts.
+    manualDragRef.current = null;
   }
 
   function onPointerCancel() {
@@ -1230,6 +1244,7 @@ function App() {
   function onBubblePointerDown(e: React.PointerEvent) {
     // Prevent outside-click handler from firing when interacting with the bubble.
     e.stopPropagation();
+    // Do not start real drag until threshold is crossed (see start/move handlers)
     onPointerDown(e);
 
     // Focus window immediately and schedule a first-click expand fallback
@@ -1243,13 +1258,7 @@ function App() {
       }
     })();
 
-    // Fallback: if not dragged shortly after press, expand.
-    if (!expanded) {
-      if (expandFallbackTimerRef.current) window.clearTimeout(expandFallbackTimerRef.current);
-      expandFallbackTimerRef.current = window.setTimeout(() => {
-        if (!expandedRef.current && !pointerRef.current.didDrag) setExpanded(true);
-      }, 80);
-    }
+    // Removed expand-on-timeout fallback; rely on pointerup to expand reliably.
   }
 
   function onPointerUp() {
