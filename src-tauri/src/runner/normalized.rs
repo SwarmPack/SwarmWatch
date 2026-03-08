@@ -9,6 +9,14 @@ pub struct NormalizedEvent {
     pub detail: String,
     pub hook: String,
     pub project_name: Option<String>,
+
+    // Optional metadata for Agent Wrapped (persisted by control plane).
+    pub project_path: Option<String>,
+    pub model: Option<String>,
+    pub prompt_chars: Option<i64>,
+    pub tool_name: Option<String>,
+    pub tool_bucket: Option<String>,
+    pub file_paths: Vec<String>,
 }
 
 /// Runner-side policy: should this incoming event create UI state / approvals?

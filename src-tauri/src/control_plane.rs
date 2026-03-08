@@ -19,14 +19,15 @@ use tokio::time::{sleep, Duration};
 use tower_http::cors::{Any, CorsLayer};
 use uuid::Uuid;
 
-use crate::settings;
+use crate::{db, settings};
+use crate::wrapped;
 
 const HOST: &str = "127.0.0.1";
 pub const PORT: u16 = 4100;
 
 // How long an agent can go without events before we mark it inactive.
-// (Used to be 90s, bumped to 5 minutes.)
-const INACTIVITY_TIMEOUT_S: i64 = 180;
+// Keep in sync with the UI inactivity timeout (`src/useAgentStates.ts`).
+const INACTIVITY_TIMEOUT_S: i64 = 300;
 
 fn now_epoch_s() -> i64 {
     std::time::SystemTime::now()
@@ -53,6 +54,20 @@ pub struct AgentStateEvent {
     pub hook: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project_name: Option<String>,
+
+    // Optional rich metadata (for Agent Wrapped)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_chars: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_bucket: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub file_paths: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -102,6 +117,10 @@ struct AppState {
     approvals: Arc<Mutex<HashMap<String, ApprovalRequest>>>,
     last_seen: Arc<Mutex<HashMap<String, i64>>>,
     tx: broadcast::Sender<serde_json::Value>,
+
+    // Persistence (SQLite)
+    db: Option<db::Db>,
+    dbw: Option<db::DbWriter>,
 }
 
 pub async fn spawn_control_plane() {
@@ -114,11 +133,28 @@ pub async fn spawn_control_plane() {
     // Seeding default agents would permanently consume orbit slots (max 8).
     let state_map: HashMap<String, AgentStateEvent> = HashMap::new();
 
+    // Optional DB init: if opening DB fails, continue without persistence.
+    let (db_conn, dbw) = match db::open_db() {
+        Ok(db_conn) => {
+            let w = db::DbWriter::new(db_conn.clone());
+            w.spawn_flush_task();
+            db::spawn_retention_task(db_conn.clone());
+            (Some(db_conn), Some(w))
+        }
+        Err(e) => {
+            eprintln!("[db] open_db failed (continuing without persistence): {e}");
+            (None, None)
+        }
+    };
+
     let app_state = AppState {
         state: Arc::new(Mutex::new(state_map)),
         approvals: Arc::new(Mutex::new(HashMap::new())),
         last_seen: Arc::new(Mutex::new(HashMap::new())),
         tx,
+
+        db: db_conn,
+        dbw,
     };
 
     // Server-side inactivity timeout:
@@ -130,6 +166,7 @@ pub async fn spawn_control_plane() {
         .route("/health", get(health))
         .route("/state", get(get_state))
         .route("/event", post(post_event))
+        .route("/wrapped", get(get_wrapped))
         .route("/approvals", get(get_approvals))
         .route("/approval/request", post(post_approval_request))
         .route("/approval/wait/:id", get(get_approval_wait))
@@ -159,6 +196,46 @@ pub async fn spawn_control_plane() {
             eprintln!("[control_plane] serve error: {e}");
         }
     });
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct WrappedQuery {
+    /// today | past7
+    range: Option<String>,
+    /// optional project_path selection for card2
+    project_path: Option<String>,
+}
+
+async fn get_wrapped(
+    State(st): State<AppState>,
+    axum::extract::Query(q): axum::extract::Query<WrappedQuery>,
+) -> Response {
+    let Some(db_conn) = &st.db else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"ok": false, "error": "DB not available"})),
+        )
+            .into_response();
+    };
+
+    let range_s = q.range.unwrap_or_else(|| "today".to_string());
+    let Some(range) = wrapped::RangeKind::from_str(range_s.as_str()) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "range must be today|past7"})),
+        )
+            .into_response();
+    };
+
+    let out = wrapped::compute_wrapped(db_conn, range, q.project_path.as_deref());
+    match out {
+        Ok(v) => (StatusCode::OK, Json(json!({"ok": true, "data": v}))).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"ok": false, "error": e})),
+        )
+            .into_response(),
+    }
 }
 
 fn sanitize_instance_id_for_key(instance_id: &str) -> String {
@@ -215,6 +292,17 @@ async fn post_event(State(st): State<AppState>, Json(mut ev): Json<AgentStateEve
         ev.ts = now_epoch_s();
     }
 
+    // Backfill project_path when missing.
+    // Some hook runners (or older payload schemas) only provide a project name.
+    // Wrapped needs a stable grouping key; fall back to the name.
+    if ev.project_path.as_deref().unwrap_or("").trim().is_empty() {
+        if let Some(name) = ev.project_name.clone() {
+            if !name.trim().is_empty() {
+                ev.project_path = Some(name);
+            }
+        }
+    }
+
     ev.agent_key = normalize_agent_key(&ev.agent_family, &ev.agent_instance_id);
 
     {
@@ -225,6 +313,34 @@ async fn post_event(State(st): State<AppState>, Json(mut ev): Json<AgentStateEve
     {
         let mut map = st.state.lock().unwrap();
         map.insert(ev.agent_key.clone(), ev.clone());
+    }
+
+    // Persist event best-effort (never break live UI)
+    if let Some(dbw) = &st.dbw {
+        // Extract optional rich fields from the inbound JSON if present.
+        // New runners may send these; older builds will not.
+        // We keep the base schema backwards compatible.
+        //
+        // NOTE: Use the raw serde_json value we broadcast to avoid re-parsing.
+        let raw_json = serde_json::to_string(&ev).ok();
+        let ins = db::EventInsert {
+            ts_s: ev.ts,
+            agent_family: ev.agent_family.clone(),
+            agent_instance_id: ev.agent_instance_id.clone(),
+            agent_key: ev.agent_key.clone(),
+            state: ev.state.clone(),
+            hook: ev.hook.clone(),
+            detail: ev.detail.clone(),
+            project_path: ev.project_path.clone(),
+            project_name: ev.project_name.clone(),
+            model: ev.model.clone(),
+            prompt_chars: ev.prompt_chars,
+            tool_name: ev.tool_name.clone(),
+            tool_bucket: ev.tool_bucket.clone(),
+            raw_json,
+            files: ev.file_paths.clone(),
+        };
+        dbw.enqueue_event(ins);
     }
 
     // If an agent session ends, we should expire any lingering pending approvals
@@ -277,7 +393,7 @@ fn spawn_inactivity_task(st: AppState) {
                     if let Some(ev) = map.get_mut(&key) {
                         if ev.state != "inactive" {
                             ev.state = "inactive".to_string();
-                            ev.detail = Some("No activity (3m timeout)".to_string());
+                            ev.detail = Some("No activity (5m timeout)".to_string());
                             ev.ts = now_s;
                             updated = Some(ev.clone());
                         }
@@ -349,6 +465,13 @@ async fn post_approval_request(
         .clone()
         .unwrap_or_else(|| vec!["deny".to_string()]);
 
+    // Keep copies for persistence before we move into the in-memory struct.
+    let agent_family_for_db = input.agent_family.clone();
+    let agent_instance_id_for_db = input.agent_instance_id.clone();
+    let hook_for_db = input.hook.clone();
+    let summary_for_db = input.summary.clone();
+    let agent_key_for_db = agent_key.clone();
+
     let req = ApprovalRequest {
         id: id.clone(),
         created_at,
@@ -369,6 +492,19 @@ async fn post_approval_request(
     {
         let mut approvals = st.approvals.lock().unwrap();
         approvals.insert(id.clone(), req);
+    }
+
+    // Persist approval request best-effort.
+    if let Some(db_conn) = &st.db {
+        db::approval_insert(
+            db_conn,
+            &id,
+            &agent_key_for_db,
+            &agent_family_for_db,
+            &agent_instance_id_for_db,
+            &hook_for_db,
+            &summary_for_db,
+        );
     }
 
     broadcast_approvals(&st);
@@ -435,6 +571,14 @@ async fn post_approval_decision(
         item.decision = Some(input.decision);
         item.reason = input.reason;
         item.decided_at = Some(now_epoch_s());
+
+        // Persist decision best-effort.
+        if let Some(db_conn) = &st.db {
+            let decision = item.decision.as_deref();
+            let status = item.status.clone();
+            let reason = item.reason.clone();
+            db::approval_update_decision(db_conn, &id, &status, decision, &reason);
+        }
     }
 
     broadcast_approvals(&st);
@@ -575,6 +719,13 @@ fn handle_ws_text(st: &AppState, text: &str) {
                 item.decision = Some(decision);
                 item.reason = reason;
                 item.decided_at = Some(now_epoch_s());
+
+                if let Some(db_conn) = &st.db {
+                    let d = item.decision.as_deref();
+                    let s = item.status.clone();
+                    let r = item.reason.clone();
+                    db::approval_update_decision(db_conn, &request_id, &s, d, &r);
+                }
             }
             broadcast_approvals(st);
         }

@@ -132,6 +132,17 @@ impl CursorAdapter {
                     },
                     hook: self.hook,
                     project_name,
+                    project_path: input
+                        .get("workspace_roots")
+                        .and_then(|x| x.as_array())
+                        .and_then(|a| a.first())
+                        .and_then(|x| x.as_str())
+                        .map(|s| s.to_string()),
+                    model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                    prompt_chars: Some(prompt.chars().count() as i64),
+                    tool_name: None,
+                    tool_bucket: Some("thinking".to_string()),
+                    file_paths: Vec::new(),
                 });
 
                 RunnerOutcome::StdoutJson(
@@ -154,6 +165,15 @@ impl CursorAdapter {
                 let category = classify_tool(&tool_name);
                 let summary = summarize_tool(&tool_name, tool_input);
 
+                // Best-effort file extraction.
+                let mut files: Vec<String> = Vec::new();
+                if let Some(p) = tool_input
+                    .and_then(|v| v.get("path"))
+                    .and_then(|x| x.as_str())
+                {
+                    files.push(p.to_string());
+                }
+
                 // If this is an approval-required tool and auto-approve is enabled,
                 // skip the awaiting state entirely and go straight to running.
                 if matches!(category, ToolCategory::Other) && auto_approve_enabled("cursor") {
@@ -165,6 +185,17 @@ impl CursorAdapter {
                         detail: format!("Auto-allowed: {}", summary),
                         hook: self.hook.clone(),
                         project_name: project_name.clone(),
+                        project_path: input
+                            .get("workspace_roots")
+                            .and_then(|x| x.as_array())
+                            .and_then(|a| a.first())
+                            .and_then(|x| x.as_str())
+                            .map(|s| s.to_string()),
+                        model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                        prompt_chars: None,
+                        tool_name: Some(tool_name.clone()),
+                        tool_bucket: Some("running_tools".to_string()),
+                        file_paths: files.clone(),
                     });
 
                     return RunnerOutcome::StdoutJson(
@@ -203,6 +234,22 @@ impl CursorAdapter {
                     detail: summary.clone(),
                     hook: self.hook.clone(),
                     project_name: project_name.clone(),
+                    project_path: input
+                        .get("workspace_roots")
+                        .and_then(|x| x.as_array())
+                        .and_then(|a| a.first())
+                        .and_then(|x| x.as_str())
+                        .map(|s| s.to_string()),
+                    model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                    prompt_chars: None,
+                    tool_name: Some(tool_name.clone()),
+                    tool_bucket: Some(match category {
+                        ToolCategory::Read => "thinking",
+                        ToolCategory::Edit => "editing",
+                        ToolCategory::Other => "running_tools",
+                    }
+                    .to_string()),
+                    file_paths: files.clone(),
                 });
 
                 // A2: read/edit are immediately allowed, do not block.
@@ -263,6 +310,17 @@ impl CursorAdapter {
                             detail: format!("Denied: {}", summary),
                             hook: self.hook.clone(),
                             project_name: project_name.clone(),
+                            project_path: input
+                                .get("workspace_roots")
+                                .and_then(|x| x.as_array())
+                                .and_then(|a| a.first())
+                                .and_then(|x| x.as_str())
+                                .map(|s| s.to_string()),
+                            model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                            prompt_chars: None,
+                            tool_name: Some(tool_name.clone()),
+                            tool_bucket: Some("running_tools".to_string()),
+                            file_paths: files.clone(),
                         });
 
                         RunnerOutcome::StdoutJson(
@@ -285,6 +343,17 @@ impl CursorAdapter {
                             detail: summary.clone(),
                             hook: self.hook.clone(),
                             project_name: project_name.clone(),
+                            project_path: input
+                                .get("workspace_roots")
+                                .and_then(|x| x.as_array())
+                                .and_then(|a| a.first())
+                                .and_then(|x| x.as_str())
+                                .map(|s| s.to_string()),
+                            model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                            prompt_chars: None,
+                            tool_name: Some(tool_name.clone()),
+                            tool_bucket: Some("running_tools".to_string()),
+                            file_paths: files.clone(),
                         });
 
                         RunnerOutcome::StdoutJson(
@@ -307,6 +376,17 @@ impl CursorAdapter {
                             detail: summary.clone(),
                             hook: self.hook.clone(),
                             project_name: project_name.clone(),
+                            project_path: input
+                                .get("workspace_roots")
+                                .and_then(|x| x.as_array())
+                                .and_then(|a| a.first())
+                                .and_then(|x| x.as_str())
+                                .map(|s| s.to_string()),
+                            model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                            prompt_chars: None,
+                            tool_name: Some(tool_name.clone()),
+                            tool_bucket: Some("running_tools".to_string()),
+                            file_paths: files.clone(),
                         });
 
                         RunnerOutcome::StdoutJson(
@@ -338,6 +418,17 @@ impl CursorAdapter {
                     },
                     hook: self.hook,
                     project_name,
+                    project_path: input
+                        .get("workspace_roots")
+                        .and_then(|x| x.as_array())
+                        .and_then(|a| a.first())
+                        .and_then(|x| x.as_str())
+                        .map(|s| s.to_string()),
+                    model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                    prompt_chars: None,
+                    tool_name: None,
+                    tool_bucket: Some("thinking".to_string()),
+                    file_paths: Vec::new(),
                 });
 
                 RunnerOutcome::StdoutJson(CursorStdout::EmptyObject.to_json())
@@ -356,6 +447,17 @@ impl CursorAdapter {
                     detail: format!("Error: {}", truncate(err, 200)),
                     hook: self.hook,
                     project_name,
+                    project_path: input
+                        .get("workspace_roots")
+                        .and_then(|x| x.as_array())
+                        .and_then(|a| a.first())
+                        .and_then(|x| x.as_str())
+                        .map(|s| s.to_string()),
+                    model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                    prompt_chars: None,
+                    tool_name: None,
+                    tool_bucket: Some("running_tools".to_string()),
+                    file_paths: Vec::new(),
                 });
 
                 RunnerOutcome::ExitCode(0)
@@ -380,6 +482,17 @@ impl CursorAdapter {
                     detail: detail.to_string(),
                     hook: self.hook,
                     project_name,
+                    project_path: input
+                        .get("workspace_roots")
+                        .and_then(|x| x.as_array())
+                        .and_then(|a| a.first())
+                        .and_then(|x| x.as_str())
+                        .map(|s| s.to_string()),
+                    model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                    prompt_chars: None,
+                    tool_name: None,
+                    tool_bucket: Some("thinking".to_string()),
+                    file_paths: Vec::new(),
                 });
 
                 RunnerOutcome::StdoutJson(CursorStdout::EmptyObject.to_json())
@@ -394,6 +507,17 @@ impl CursorAdapter {
                     detail: "Session ended".to_string(),
                     hook: self.hook,
                     project_name,
+                    project_path: input
+                        .get("workspace_roots")
+                        .and_then(|x| x.as_array())
+                        .and_then(|a| a.first())
+                        .and_then(|x| x.as_str())
+                        .map(|s| s.to_string()),
+                    model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                    prompt_chars: None,
+                    tool_name: None,
+                    tool_bucket: Some("thinking".to_string()),
+                    file_paths: Vec::new(),
                 });
                 RunnerOutcome::ExitCode(0)
             }

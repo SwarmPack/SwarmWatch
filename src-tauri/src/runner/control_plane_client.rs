@@ -75,6 +75,12 @@ impl ControlPlaneClient {
                 "detail": ev.detail,
                 "hook": ev.hook,
                 "projectName": ev.project_name,
+                "projectPath": ev.project_path,
+                "model": ev.model,
+                "promptChars": ev.prompt_chars,
+                "toolName": ev.tool_name,
+                "toolBucket": ev.tool_bucket,
+                "filePaths": ev.file_paths,
                 "ts": now_epoch_s()
             }))
             .send();

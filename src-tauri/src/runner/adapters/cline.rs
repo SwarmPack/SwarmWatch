@@ -74,6 +74,17 @@ fn handle_user_prompt_submit(
         detail: summary,
         hook: "UserPromptSubmit".to_string(),
         project_name: project_name_from_roots(&input),
+        project_path: input
+            .get("workspaceRoots")
+            .and_then(|x| x.as_array())
+            .and_then(|a| a.first())
+            .and_then(|x| x.as_str())
+            .map(|s| s.to_string()),
+        model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+        prompt_chars: Some(prompt.chars().count() as i64),
+        tool_name: None,
+        tool_bucket: Some("thinking".to_string()),
+        file_paths: Vec::new(),
     });
 
     RunnerOutcome::StdoutJson(cline_stdout(false, None, None))
@@ -153,6 +164,21 @@ fn handle_pre_tool_use(task_id: String, input: Value, cp: &ControlPlaneClient) -
             detail: format!("Auto-allowed: {}", summary),
             hook: "PreToolUse".to_string(),
             project_name: project_name_from_roots(&input),
+            project_path: input
+                .get("workspaceRoots")
+                .and_then(|x| x.as_array())
+                .and_then(|a| a.first())
+                .and_then(|x| x.as_str())
+                .map(|s| s.to_string()),
+            model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+            prompt_chars: None,
+            tool_name: Some(tool.clone()),
+            tool_bucket: Some("running_tools".to_string()),
+            file_paths: tool_params
+                .and_then(|v| v.get("path"))
+                .and_then(|x| x.as_str())
+                .map(|p| vec![p.to_string()])
+                .unwrap_or_default(),
         });
 
         return RunnerOutcome::StdoutJson(cline_stdout(false, None, None));
@@ -177,6 +203,26 @@ fn handle_pre_tool_use(task_id: String, input: Value, cp: &ControlPlaneClient) -
         detail: summary.clone(),
         hook: "PreToolUse".to_string(),
         project_name: project_name_from_roots(&input),
+        project_path: input
+            .get("workspaceRoots")
+            .and_then(|x| x.as_array())
+            .and_then(|a| a.first())
+            .and_then(|x| x.as_str())
+            .map(|s| s.to_string()),
+        model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+        prompt_chars: None,
+        tool_name: Some(tool.clone()),
+        tool_bucket: Some(match initial_state {
+            "editing" => "editing",
+            "reading" => "thinking",
+            _ => "running_tools",
+        }
+        .to_string()),
+        file_paths: tool_params
+            .and_then(|v| v.get("path"))
+            .and_then(|x| x.as_str())
+            .map(|p| vec![p.to_string()])
+            .unwrap_or_default(),
     });
 
     // Auto-allow for read/edit.
@@ -223,6 +269,21 @@ fn handle_pre_tool_use(task_id: String, input: Value, cp: &ControlPlaneClient) -
                 detail: summary,
                 hook: "PreToolUse".to_string(),
                 project_name: project_name_from_roots(&input),
+                project_path: input
+                    .get("workspaceRoots")
+                    .and_then(|x| x.as_array())
+                    .and_then(|a| a.first())
+                    .and_then(|x| x.as_str())
+                    .map(|s| s.to_string()),
+                model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                prompt_chars: None,
+                tool_name: Some(tool.clone()),
+                tool_bucket: Some("running_tools".to_string()),
+                file_paths: tool_params
+                    .and_then(|v| v.get("path"))
+                    .and_then(|x| x.as_str())
+                    .map(|p| vec![p.to_string()])
+                    .unwrap_or_default(),
             });
             RunnerOutcome::StdoutJson(cline_stdout(false, None, None))
         }
@@ -235,6 +296,21 @@ fn handle_pre_tool_use(task_id: String, input: Value, cp: &ControlPlaneClient) -
                 detail: format!("Denied: {}", summary),
                 hook: "PreToolUse".to_string(),
                 project_name: project_name_from_roots(&input),
+                project_path: input
+                    .get("workspaceRoots")
+                    .and_then(|x| x.as_array())
+                    .and_then(|a| a.first())
+                    .and_then(|x| x.as_str())
+                    .map(|s| s.to_string()),
+                model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                prompt_chars: None,
+                tool_name: Some(tool.clone()),
+                tool_bucket: Some("running_tools".to_string()),
+                file_paths: tool_params
+                    .and_then(|v| v.get("path"))
+                    .and_then(|x| x.as_str())
+                    .map(|p| vec![p.to_string()])
+                    .unwrap_or_default(),
             });
             RunnerOutcome::StdoutJson(cline_stdout(true, Some("Blocked by SwarmWatch"), None))
         }
@@ -278,6 +354,17 @@ fn handle_post_tool_use(task_id: String, input: Value, cp: &ControlPlaneClient) 
         detail,
         hook: "PostToolUse".to_string(),
         project_name: project_name_from_roots(&input),
+        project_path: input
+            .get("workspaceRoots")
+            .and_then(|x| x.as_array())
+            .and_then(|a| a.first())
+            .and_then(|x| x.as_str())
+            .map(|s| s.to_string()),
+        model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+        prompt_chars: None,
+        tool_name: Some(tool.to_string()),
+        tool_bucket: Some("thinking".to_string()),
+        file_paths: Vec::new(),
     });
 
     RunnerOutcome::StdoutJson(cline_stdout(false, None, None))
@@ -301,6 +388,17 @@ fn handle_task_complete(task_id: String, input: Value, cp: &ControlPlaneClient) 
         detail: format!("TaskComplete: {}", status),
         hook: "TaskComplete".to_string(),
         project_name: project_name_from_roots(&input),
+        project_path: input
+            .get("workspaceRoots")
+            .and_then(|x| x.as_array())
+            .and_then(|a| a.first())
+            .and_then(|x| x.as_str())
+            .map(|s| s.to_string()),
+        model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+        prompt_chars: None,
+        tool_name: None,
+        tool_bucket: Some("thinking".to_string()),
+        file_paths: Vec::new(),
     });
 
     RunnerOutcome::StdoutJson(cline_stdout(false, None, None))
@@ -324,6 +422,17 @@ fn handle_task_cancel(task_id: String, input: Value, cp: &ControlPlaneClient) ->
         detail: format!("TaskCancel: {}", status),
         hook: "TaskCancel".to_string(),
         project_name: project_name_from_roots(&input),
+        project_path: input
+            .get("workspaceRoots")
+            .and_then(|x| x.as_array())
+            .and_then(|a| a.first())
+            .and_then(|x| x.as_str())
+            .map(|s| s.to_string()),
+        model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+        prompt_chars: None,
+        tool_name: None,
+        tool_bucket: Some("running_tools".to_string()),
+        file_paths: Vec::new(),
     });
 
     RunnerOutcome::StdoutJson(cline_stdout(false, None, None))

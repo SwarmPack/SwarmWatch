@@ -1,11 +1,39 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 mod avatar_server;
 pub mod control_plane;
+pub mod db;
+pub mod wrapped;
 pub mod integrations;
 pub mod runner;
 pub mod settings;
 
 use tauri::Manager;
+
+#[tauri::command]
+fn save_file_bytes(path: String, bytes: Vec<u8>) -> Result<(), String> {
+    use std::fs;
+    use std::path::PathBuf;
+
+    if path.trim().is_empty() {
+        return Err("path is empty".to_string());
+    }
+
+    let p = PathBuf::from(path);
+    if let Some(parent) = p.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("create_dir_all failed: {e}"))?;
+    }
+    fs::write(&p, bytes).map_err(|e| format!("write failed: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn save_file_base64(path: String, base64: String) -> Result<(), String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(base64.as_bytes())
+        .map_err(|e| format!("base64 decode failed: {e}"))?;
+    save_file_bytes(path, bytes)
+}
 
 /// Restart the application (best-effort) after an updater install.
 ///
@@ -218,9 +246,12 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .invoke_handler(tauri::generate_handler![
             greet,
             app_restart,
+            save_file_bytes,
+            save_file_base64,
             integrations_status,
             integrations_enable,
             integrations_disable,

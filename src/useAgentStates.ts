@@ -46,7 +46,8 @@ function safeParse(text: string): WsMessage | null {
 // Orbit visibility is computed in the UI layer.
 const MAX_STORE = 64;
 const MAX_ACTIVITY = 200;
-const INACTIVITY_TIMEOUT_S = 180;
+// Keep in sync with the control plane inactivity timeout.
+const INACTIVITY_TIMEOUT_S = 300;
 
 export function useAgentStates(): AgentStore {
   const [store, setStore] = useState<AgentStore>(() => ({
@@ -87,7 +88,7 @@ export function useAgentStates(): AgentStore {
     for (const [k, ev] of entries) {
       const age = now() - (lastSeenRef.current[k] ?? now());
       if (age >= INACTIVITY_TIMEOUT_S) {
-        out[k] = { ...ev, state: 'inactive' as AgentState, detail: 'No activity (3m timeout)' };
+        out[k] = { ...ev, state: 'inactive' as AgentState, detail: 'No activity (5m timeout)' };
       } else {
         out[k] = ev;
       }

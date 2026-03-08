@@ -52,5 +52,13 @@
         "https://github.com/SwarmPack/SwarmWatch/releases/latest/download/latest.json"
       ]
     }
+    ,
+    "clipboardManager": {
+      "allowReadText": true,
+      "allowWriteText": true,
+      "allowReadImage": true,
+      "allowWriteImage": true,
+      "allowClear": true
+    }
   }
 }

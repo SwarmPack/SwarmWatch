@@ -4,6 +4,9 @@ pub mod cursor;
 pub mod vscode;
 pub mod windsurf;
 
+#[cfg(test)]
+mod vscode_tests;
+
 pub use claude::ClaudeAdapter;
 pub use cline::ClineAdapter;
 pub use cursor::CursorAdapter;

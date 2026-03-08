@@ -5,9 +5,12 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "core:path:allow-join",
+    "core:path:allow-resolve-directory",
     "updater:default",
     "opener:default",
     "dialog:allow-open",
+    "dialog:allow-save",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "core:window:allow-start-dragging",
@@ -17,6 +20,12 @@
     "core:window:allow-set-position",
     "core:window:allow-outer-position",
     "core:window:allow-current-monitor",
-    "core:window:allow-show"
+    "core:window:allow-show",
+
+    "clipboard-manager:allow-write-image",
+    "clipboard-manager:allow-read-image",
+    "clipboard-manager:allow-write-text",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-clear"
   ]
 }

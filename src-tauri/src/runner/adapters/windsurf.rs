@@ -68,6 +68,22 @@ impl WindsurfAdapter {
             detail: summary.clone(),
             hook: self.action.clone(),
             project_name: None,
+            project_path: input.get("cwd").and_then(|x| x.as_str()).map(|s| s.to_string()),
+            model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+            prompt_chars: tool
+                .and_then(|t| t.get("user_prompt"))
+                .and_then(|x| x.as_str())
+                .map(|p| p.chars().count() as i64),
+            tool_name: tool
+                .and_then(|t| t.get("mcp_tool_name"))
+                .and_then(|x| x.as_str())
+                .map(|s| s.to_string()),
+            tool_bucket: Some("running_tools".to_string()),
+            file_paths: tool
+                .and_then(|t| t.get("file_path"))
+                .and_then(|x| x.as_str())
+                .map(|p| vec![p.to_string()])
+                .unwrap_or_default(),
         });
 
         if !is_control {
@@ -106,6 +122,16 @@ impl WindsurfAdapter {
                 detail: summary.clone(),
                 hook: self.action.clone(),
                 project_name: None,
+                project_path: input.get("cwd").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                prompt_chars: None,
+                tool_name: None,
+                tool_bucket: Some("running_tools".to_string()),
+                file_paths: tool
+                    .and_then(|t| t.get("file_path"))
+                    .and_then(|x| x.as_str())
+                    .map(|p| vec![p.to_string()])
+                    .unwrap_or_default(),
             });
             return RunnerOutcome::ExitCode(0);
         }
@@ -119,6 +145,16 @@ impl WindsurfAdapter {
             detail: format!("Denied: {summary}"),
             hook: self.action.clone(),
             project_name: None,
+            project_path: input.get("cwd").and_then(|x| x.as_str()).map(|s| s.to_string()),
+            model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+            prompt_chars: None,
+            tool_name: None,
+            tool_bucket: Some("running_tools".to_string()),
+            file_paths: tool
+                .and_then(|t| t.get("file_path"))
+                .and_then(|x| x.as_str())
+                .map(|p| vec![p.to_string()])
+                .unwrap_or_default(),
         });
 
         RunnerOutcome::ExitCode(2)

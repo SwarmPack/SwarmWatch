@@ -80,6 +80,31 @@ impl ClaudeAdapter {
             detail,
             hook: self.hook,
             project_name: None,
+            project_path: input
+                .get("cwd")
+                .and_then(|x| x.as_str())
+                .map(|s| s.to_string()),
+            model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+            prompt_chars: input
+                .get("prompt")
+                .and_then(|x| x.as_str())
+                .map(|p| p.chars().count() as i64),
+            tool_name: input
+                .get("tool_name")
+                .and_then(|x| x.as_str())
+                .map(|s| s.to_string()),
+            tool_bucket: Some(match state {
+                "editing" => "editing",
+                "reading" | "thinking" => "thinking",
+                _ => "running_tools",
+            }
+            .to_string()),
+            file_paths: input
+                .get("tool_input")
+                .and_then(|v| v.get("path"))
+                .and_then(|x| x.as_str())
+                .map(|p| vec![p.to_string()])
+                .unwrap_or_default(),
         });
 
         // Per Claude docs, these hooks can block by returning {decision:"block"...},
@@ -117,6 +142,20 @@ fn handle_pre_tool_use(session_id: String, input: Value, cp: &ControlPlaneClient
             detail: format!("Auto-allowed: {}", summary),
             hook: "PreToolUse".to_string(),
             project_name: None,
+            project_path: input
+                .get("cwd")
+                .and_then(|x| x.as_str())
+                .map(|s| s.to_string()),
+            model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+            prompt_chars: None,
+            tool_name: Some(tool.clone()),
+            tool_bucket: Some("running_tools".to_string()),
+            file_paths: input
+                .get("tool_input")
+                .and_then(|v| v.get("path"))
+                .and_then(|x| x.as_str())
+                .map(|p| vec![p.to_string()])
+                .unwrap_or_default(),
         });
         return RunnerOutcome::ExitCode(0);
     }
@@ -136,6 +175,25 @@ fn handle_pre_tool_use(session_id: String, input: Value, cp: &ControlPlaneClient
         detail: summary.clone(),
         hook: "PreToolUse".to_string(),
         project_name: None,
+        project_path: input
+            .get("cwd")
+            .and_then(|x| x.as_str())
+            .map(|s| s.to_string()),
+        model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+        prompt_chars: None,
+        tool_name: Some(tool.clone()),
+        tool_bucket: Some(match initial_state {
+            "editing" => "editing",
+            "reading" => "thinking",
+            _ => "running_tools",
+        }
+        .to_string()),
+        file_paths: input
+            .get("tool_input")
+            .and_then(|v| v.get("path"))
+            .and_then(|x| x.as_str())
+            .map(|p| vec![p.to_string()])
+            .unwrap_or_default(),
     });
 
     // Auto-allow for read/edit.
@@ -187,6 +245,20 @@ fn handle_pre_tool_use(session_id: String, input: Value, cp: &ControlPlaneClient
                 detail: summary.clone(),
                 hook: "PreToolUse".to_string(),
                 project_name: None,
+                project_path: input
+                    .get("cwd")
+                    .and_then(|x| x.as_str())
+                    .map(|s| s.to_string()),
+                model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                prompt_chars: None,
+                tool_name: Some(tool.clone()),
+                tool_bucket: Some("running_tools".to_string()),
+                file_paths: input
+                    .get("tool_input")
+                    .and_then(|v| v.get("path"))
+                    .and_then(|x| x.as_str())
+                    .map(|p| vec![p.to_string()])
+                    .unwrap_or_default(),
             });
             // Claude allows by exiting 0 (no JSON required).
             RunnerOutcome::ExitCode(0)
@@ -201,6 +273,20 @@ fn handle_pre_tool_use(session_id: String, input: Value, cp: &ControlPlaneClient
                 detail: format!("Denied: {}", summary),
                 hook: "PreToolUse".to_string(),
                 project_name: None,
+                project_path: input
+                    .get("cwd")
+                    .and_then(|x| x.as_str())
+                    .map(|s| s.to_string()),
+                model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                prompt_chars: None,
+                tool_name: Some(tool.clone()),
+                tool_bucket: Some("running_tools".to_string()),
+                file_paths: input
+                    .get("tool_input")
+                    .and_then(|v| v.get("path"))
+                    .and_then(|x| x.as_str())
+                    .map(|p| vec![p.to_string()])
+                    .unwrap_or_default(),
             });
             RunnerOutcome::StdoutJson(claude_pretooluse_stdout("deny", "Denied by SwarmWatch."))
         }

@@ -57,6 +57,24 @@ impl VsCodeAdapter {
             detail,
             hook: self.hook,
             project_name: project_name_from_cwd(&input),
+            project_path: input.get("cwd").and_then(|x| x.as_str()).map(|s| s.to_string()),
+            model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+            prompt_chars: input
+                .get("prompt")
+                .and_then(|x| x.as_str())
+                .map(|p| p.chars().count() as i64),
+            tool_name: input
+                .get("tool_name")
+                .or_else(|| input.get("toolName"))
+                .and_then(|x| x.as_str())
+                .map(|s| s.to_string()),
+            tool_bucket: Some(match state {
+                "editing" => "editing",
+                "reading" | "thinking" => "thinking",
+                _ => "running_tools",
+            }
+            .to_string()),
+            file_paths: Vec::new(),
         });
 
         RunnerOutcome::ExitCode(0)
@@ -88,6 +106,20 @@ fn handle_pre_tool_use(session_id: String, input: Value, cp: &ControlPlaneClient
             detail: format!("Auto-allowed: {}", summary),
             hook: "PreToolUse".to_string(),
             project_name: project_name_from_cwd(&input),
+            project_path: input.get("cwd").and_then(|x| x.as_str()).map(|s| s.to_string()),
+            model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+            prompt_chars: None,
+            tool_name: Some(tool.clone()),
+            tool_bucket: Some("running_tools".to_string()),
+            file_paths: tool_input
+                .and_then(|v| v.get("files"))
+                .and_then(|x| x.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect::<Vec<String>>()
+                })
+                .unwrap_or_default(),
         });
         return RunnerOutcome::StdoutJson(vscode_pretooluse_stdout(
             "allow",
@@ -117,6 +149,25 @@ fn handle_pre_tool_use(session_id: String, input: Value, cp: &ControlPlaneClient
         detail: summary.clone(),
         hook: "PreToolUse".to_string(),
         project_name: project_name_from_cwd(&input),
+        project_path: input.get("cwd").and_then(|x| x.as_str()).map(|s| s.to_string()),
+        model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+        prompt_chars: None,
+        tool_name: Some(tool.clone()),
+        tool_bucket: Some(match initial_state {
+            "editing" => "editing",
+            "reading" => "thinking",
+            _ => "running_tools",
+        }
+        .to_string()),
+        file_paths: tool_input
+            .and_then(|v| v.get("files"))
+            .and_then(|x| x.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect::<Vec<String>>()
+            })
+            .unwrap_or_default(),
     });
 
     // Auto-allow for read/edit.
@@ -162,6 +213,20 @@ fn handle_pre_tool_use(session_id: String, input: Value, cp: &ControlPlaneClient
                 detail: summary.clone(),
                 hook: "PreToolUse".to_string(),
                 project_name: project_name_from_cwd(&input),
+                project_path: input.get("cwd").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                prompt_chars: None,
+                tool_name: Some(tool.clone()),
+                tool_bucket: Some("running_tools".to_string()),
+                file_paths: tool_input
+                    .and_then(|v| v.get("files"))
+                    .and_then(|x| x.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect::<Vec<String>>()
+                    })
+                    .unwrap_or_default(),
             });
             // IMPORTANT: For VS Code Copilot Agent hooks, PreToolUse decisions
             // are communicated via `hookSpecificOutput.permissionDecision`.
@@ -180,6 +245,20 @@ fn handle_pre_tool_use(session_id: String, input: Value, cp: &ControlPlaneClient
                 detail: format!("Denied: {}", summary),
                 hook: "PreToolUse".to_string(),
                 project_name: project_name_from_cwd(&input),
+                project_path: input.get("cwd").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                model: input.get("model").and_then(|x| x.as_str()).map(|s| s.to_string()),
+                prompt_chars: None,
+                tool_name: Some(tool.clone()),
+                tool_bucket: Some("running_tools".to_string()),
+                file_paths: tool_input
+                    .and_then(|v| v.get("files"))
+                    .and_then(|x| x.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect::<Vec<String>>()
+                    })
+                    .unwrap_or_default(),
             });
             RunnerOutcome::StdoutJson(vscode_pretooluse_stdout("deny", "Denied by SwarmWatch."))
         }
@@ -194,13 +273,13 @@ fn handle_pre_tool_use(session_id: String, input: Value, cp: &ControlPlaneClient
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ToolCategory {
+pub(super) enum ToolCategory {
     Reading,
     Editing,
     Approval,
 }
 
-fn classify_vscode_tool(tool_name: &str) -> ToolCategory {
+pub(super) fn classify_vscode_tool(tool_name: &str) -> ToolCategory {
     // VS Code tool schema can vary by version/extension.
     // We keep conservative defaults.
     let t = tool_name.trim();
@@ -249,7 +328,7 @@ fn classify_vscode_tool(tool_name: &str) -> ToolCategory {
     ToolCategory::Approval
 }
 
-fn summarize_vscode_tool(tool_name: &str, tool_input: Option<&Value>) -> String {
+pub(super) fn summarize_vscode_tool(tool_name: &str, tool_input: Option<&Value>) -> String {
     if tool_name.eq_ignore_ascii_case("runCommand") {
         if let Some(cmd) = tool_input
             .and_then(|v| v.get("command"))

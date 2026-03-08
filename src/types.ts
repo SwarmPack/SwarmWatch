@@ -71,3 +71,63 @@ export type WsMessage =
   | AgentStateEvent
   | { type: 'approvals'; pending: ApprovalRequest[] }
   | SettingsMessage;
+
+// ---------------- Agent Wrapped ----------------
+
+export type WrappedRange = 'today' | 'past7';
+
+export type WrappedCard1 = {
+  agent_hours: number;
+  projects_count: number;
+  longest_run_s: number;
+  thinking_pct: number;
+  editing_pct: number;
+  running_tools_pct: number;
+};
+
+export type WrappedProjectOption = {
+  project_path: string;
+  project_name: string;
+  agent_hours: number;
+};
+
+export type WrappedCard2 = {
+  project: WrappedProjectOption;
+  prompted: number;
+  prompt_chars: number;
+  agent_hours: number;
+  ide_split: Array<[string, number]>;
+};
+
+export type WrappedMetrics = {
+  agent_hours: number;
+  projects_count: number;
+  files_count: number;
+  sessions_count: number;
+  prompts_count: number;
+  avg_session_minutes: number;
+  night_ratio: number;
+  max_parallel_agents: number;
+  error_ratio: number;
+  approval_ratio: number;
+  favourite_agent: string;
+  favourite_model?: string;
+};
+
+export type WrappedCard3 = {
+  archetype: {
+    archetype_name: string;
+    description: string;
+  };
+  metrics: WrappedMetrics;
+};
+
+export type WrappedOut = {
+  range: WrappedRange;
+  start_ts_s: number;
+  end_ts_s: number;
+  card1: WrappedCard1;
+  card2: WrappedCard2;
+  card3: WrappedCard3;
+  projects: WrappedProjectOption[];
+};
