@@ -318,14 +318,36 @@ LIMIT 25
         ide_split.push((fam, c));
         total += c;
     }
+    // Keep only the top two entries for display.
     ide_split.truncate(2);
-    let ide_split_pct = ide_split
-        .into_iter()
-        .map(|(fam, c)| {
-            let p = if total > 0 { ((c as f64) * 100.0 / (total as f64)).round() as i64 } else { 0 };
-            (fam, p)
-        })
-        .collect::<Vec<_>>();
+    // Compute percentages proportional to the full total (all families),
+    // then normalize the top-two shares so the displayed pair sums to 100.
+    let mut ide_split_pct: Vec<(String, i64)> = Vec::new();
+    if total > 0 && !ide_split.is_empty() {
+        // Raw shares relative to the full total.
+        let raw_shares: Vec<f64> = ide_split.iter().map(|(_, c)| (*c as f64) * 100.0 / (total as f64)).collect();
+        // Sum of raw shares for the displayed entries.
+        let sum_raw: f64 = raw_shares.iter().sum();
+        if sum_raw > 0.0 {
+            // Normalize each displayed share so they sum to 100, rounding first and leaving remainder to second.
+            let first_norm = (raw_shares[0] / sum_raw) * 100.0;
+            let p0 = first_norm.round() as i64;
+            ide_split_pct.push((ide_split[0].0.clone(), p0));
+            if ide_split.len() >= 2 {
+                let p1 = 100 - p0;
+                ide_split_pct.push((ide_split[1].0.clone(), p1));
+            }
+        } else {
+            // No meaningful raw share (shouldn't happen), return zeros for entries.
+            for (fam, _) in ide_split.iter() {
+                ide_split_pct.push((fam.clone(), 0));
+            }
+        }
+    } else {
+        for (fam, _) in ide_split.into_iter() {
+            ide_split_pct.push((fam, 0));
+        }
+    }
 
     let proj = projects
         .iter()

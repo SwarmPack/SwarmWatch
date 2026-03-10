@@ -17,8 +17,15 @@ pub struct VsCodeAdapter {
 
 impl VsCodeAdapter {
     pub fn detect(input: &Value) -> Option<Self> {
-        // VS Code Copilot Agent hooks use camelCase fields.
-        let hook = input.get("hookEventName")?.as_str()?.to_string();
+        // VS Code Copilot Agent hooks are Preview and have shown schema drift.
+        // Official docs use camelCase (hookEventName/sessionId), but in the wild
+        // we also observe Claude-compatible snake_case (hook_event_name/session_id)
+        // emitted by some VS Code builds/extensions.
+        let hook = input
+            .get("hookEventName")
+            .or_else(|| input.get("hook_event_name"))
+            .and_then(|x| x.as_str())?
+            .to_string();
         match hook.as_str() {
             "UserPromptSubmit" | "PreToolUse" | "PostToolUse" | "Stop" => Some(Self { hook }),
             _ => None,
@@ -28,6 +35,7 @@ impl VsCodeAdapter {
     pub fn handle(self, input: Value, cp: &ControlPlaneClient) -> RunnerOutcome {
         let session_id = input
             .get("sessionId")
+            .or_else(|| input.get("session_id"))
             .and_then(|x| x.as_str())
             .unwrap_or("default")
             .to_string();
