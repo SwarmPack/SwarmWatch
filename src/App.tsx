@@ -8,7 +8,7 @@ import { LottieCircle } from './components/LottieCircle';
 import { WrappedCard } from './components/WrappedCard';
 import type { WrappedOut, WrappedProjectOption, WrappedRange } from './types';
 import { fetchWrapped } from './wrappedClient';
-import { blobToBase64, createWrappedPng } from './wrappedShare';
+// Share/screenshot experiments removed per request.
 
 type UpdateStatus =
   | { state: 'idle' }
@@ -210,8 +210,6 @@ function App() {
   const [wrappedProjects, setWrappedProjects] = useState<WrappedProjectOption[]>([]);
   const [wrappedErr, setWrappedErr] = useState<string | null>(null);
   const [wrappedLoading, setWrappedLoading] = useState(false);
-  const [wrappedShareCard, setWrappedShareCard] = useState<0 | 1 | 2>(0);
-  const wrappedShareRef = useRef<HTMLDivElement | null>(null);
 
   // ---------------- Updater banner (Tauri) ----------------
   const UPDATE_DISMISS_KEY = 'swarmwatch.updater.bannerDismissed.v1';
@@ -508,63 +506,7 @@ function App() {
     }
   }
 
-  async function shareWrapped(idx: 0 | 1 | 2) {
-    try {
-      setWrappedErr(null);
-      if (!isTauriRuntime()) {
-        throw new Error('Share is only available in the Tauri app');
-      }
-      const node = wrappedShareRef.current;
-      if (!node) throw new Error('wrapped share node missing');
-
-      // Set which card to render and wait for React to paint it.
-      setWrappedShareCard(idx);
-      await new Promise<void>((res) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => res()))
-      );
-
-      // Render a fixed 1080×1920 image.
-      const blob = await createWrappedPng({ node, width: 1080, height: 1920 });
-      const fileName = `swarmwatch-wrapped-${wrappedRange}-${new Date().toISOString().slice(0, 10)}.png`;
-
-      const pngBytes = new Uint8Array(await blob.arrayBuffer());
-      const b64 = await blobToBase64(blob);
-
-      const [{ downloadDir, join }, { invoke }] = await Promise.all([
-        import('@tauri-apps/api/path'),
-        import('@tauri-apps/api/core')
-      ]);
-      const downloads = await downloadDir();
-      const defaultPath = await join(downloads, fileName);
-
-      try {
-        await invoke('save_file_base64', { path: defaultPath, base64: b64 });
-      } catch {
-        const { save } = await import('@tauri-apps/plugin-dialog');
-        const picked = await save({
-          defaultPath,
-          filters: [{ name: 'PNG Image', extensions: ['png'] }]
-        });
-        if (typeof picked === 'string' && picked.length) {
-          await invoke('save_file_base64', { path: picked, base64: b64 });
-        }
-      }
-
-      // Clipboard copy: use Image.fromBytes (requires tauri image-png feature)
-      try {
-        const [{ writeImage }, { Image }] = await Promise.all([
-          import('@tauri-apps/plugin-clipboard-manager'),
-          import('@tauri-apps/api/image')
-        ]);
-        const img = await Image.fromBytes(pngBytes);
-        await writeImage(img);
-      } catch {
-        // ignore clipboard errors
-      }
-    } catch (e: any) {
-      setWrappedErr(String(e?.message ?? e));
-    }
-  }
+  // Share function removed.
 
   // Check for updates once when the main UI is expanded.
   useEffect(() => {
@@ -1615,11 +1557,19 @@ function App() {
               </div>
             ) : null}
 
-            <div className="orbitRing" aria-hidden />
+            <div
+              className="orbitRing"
+              aria-hidden
+              style={wrappedOpen || settingsOpen || activityOpen ? { display: 'none' } : undefined}
+            />
 
             {toast ? <div className="toast">{toast}</div> : null}
 
-            <div className="orbitPlanets" aria-hidden={false}>
+            <div
+              className="orbitPlanets"
+              aria-hidden={wrappedOpen || settingsOpen || activityOpen}
+              style={wrappedOpen || settingsOpen || activityOpen ? { display: 'none' } : undefined}
+            >
               <div ref={orbitSpinRef} className="orbitPlanetsSpin">
                 {orbitVisible.map((k, idx) => {
                   const ev = byKey[k];
@@ -1863,124 +1813,7 @@ function App() {
                 >
                   {wrappedErr ? <div className="settingsErr">{wrappedErr}</div> : null}
 
-                  {/* Hidden render target for 1080×1920 share. */}
-                  <div
-                    ref={wrappedShareRef}
-                    style={{
-                      position: 'fixed',
-                      left: -99999,
-                      top: 0,
-                      width: 1080,
-                      height: 1920,
-                      background: '#0b0b10',
-                      padding: 64,
-                      color: 'white',
-                      boxSizing: 'border-box',
-                      fontFamily:
-                        'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial'
-                    }}
-                  >
-                    {wrappedData ? (
-                      <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-                        <div style={{ fontSize: 44, fontWeight: 900 }}>SwarmWatch · Wrapped</div>
-                        <div style={{ marginTop: 8, fontSize: 24, opacity: 0.85 }}>
-                          {wrappedRange === 'today' ? 'Today' : 'Past 7 days'}
-                        </div>
-
-                        {wrappedShareCard === 0 ? (
-                          <div style={{ marginTop: 36 }}>
-                            <div style={{ fontSize: 28, fontWeight: 800, opacity: 0.9 }}>Summary</div>
-                            <div style={{ marginTop: 28, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
-                              <div style={{ padding: 22, borderRadius: 18, background: 'rgba(255,255,255,0.06)' }}>
-                                <div style={{ opacity: 0.8, fontSize: 18 }}>Agent hours</div>
-                                <div style={{ fontSize: 44, fontWeight: 900 }}>{wrappedData.card1.agent_hours.toFixed(1)}</div>
-                              </div>
-                              <div style={{ padding: 22, borderRadius: 18, background: 'rgba(255,255,255,0.06)' }}>
-                                <div style={{ opacity: 0.8, fontSize: 18 }}>Projects</div>
-                                <div style={{ fontSize: 44, fontWeight: 900 }}>{wrappedData.card1.projects_count}</div>
-                              </div>
-                              <div style={{ padding: 22, borderRadius: 18, background: 'rgba(255,255,255,0.06)' }}>
-                                <div style={{ opacity: 0.8, fontSize: 18 }}>Thinking</div>
-                                <div style={{ fontSize: 44, fontWeight: 900 }}>{wrappedData.card1.thinking_pct}%</div>
-                              </div>
-                              <div style={{ padding: 22, borderRadius: 18, background: 'rgba(255,255,255,0.06)' }}>
-                                <div style={{ opacity: 0.8, fontSize: 18 }}>Editing</div>
-                                <div style={{ fontSize: 44, fontWeight: 900 }}>{wrappedData.card1.editing_pct}%</div>
-                              </div>
-                              <div style={{ padding: 22, borderRadius: 18, background: 'rgba(255,255,255,0.06)' }}>
-                                <div style={{ opacity: 0.8, fontSize: 18 }}>Running tools</div>
-                                <div style={{ fontSize: 44, fontWeight: 900 }}>{wrappedData.card1.running_tools_pct}%</div>
-                              </div>
-                            </div>
-                          </div>
-                        ) : wrappedShareCard === 1 ? (
-                          <div style={{ marginTop: 36 }}>
-                            <div style={{ fontSize: 28, fontWeight: 800, opacity: 0.9 }}>
-                              Project · {wrappedData.card2.project?.project_name ?? '—'}
-                            </div>
-                            <div style={{ marginTop: 28, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
-                              <div style={{ padding: 22, borderRadius: 18, background: 'rgba(255,255,255,0.06)' }}>
-                                <div style={{ opacity: 0.8, fontSize: 18 }}>Prompted</div>
-                                <div style={{ fontSize: 44, fontWeight: 900 }}>{wrappedData.card2.prompted}</div>
-                              </div>
-                              <div style={{ padding: 22, borderRadius: 18, background: 'rgba(255,255,255,0.06)' }}>
-                                <div style={{ opacity: 0.8, fontSize: 18 }}>Prompt chars</div>
-                                <div style={{ fontSize: 44, fontWeight: 900 }}>{wrappedData.card2.prompt_chars}</div>
-                              </div>
-                              <div style={{ padding: 22, borderRadius: 18, background: 'rgba(255,255,255,0.06)' }}>
-                                <div style={{ opacity: 0.8, fontSize: 18 }}>Agent hours</div>
-                                <div style={{ fontSize: 44, fontWeight: 900 }}>{wrappedData.card2.agent_hours.toFixed(1)}</div>
-                              </div>
-                              <div style={{ padding: 22, borderRadius: 18, background: 'rgba(255,255,255,0.06)' }}>
-                                <div style={{ opacity: 0.8, fontSize: 18 }}>IDE split</div>
-                                <div style={{ fontSize: 32, fontWeight: 900, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {(wrappedData.card2.ide_split ?? []).length
-                                    ? wrappedData.card2.ide_split.map(([fam, p]) => `${fam} ${p}%`).join(' · ')
-                                    : '-'}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <div style={{ marginTop: 36 }}>
-                            <div style={{ fontSize: 28, fontWeight: 800, opacity: 0.9 }}>Archetype</div>
-                            <div style={{ marginTop: 14, fontSize: 40, fontWeight: 900 }}>
-                              {wrappedData.card3.archetype.archetype_name}
-                            </div>
-                            <div style={{ marginTop: 12, fontSize: 22, opacity: 0.9 }}>
-                              {wrappedData.card3.archetype.description}
-                            </div>
-                            <div style={{ marginTop: 28, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
-                              <div style={{ padding: 22, borderRadius: 18, background: 'rgba(255,255,255,0.06)' }}>
-                                <div style={{ opacity: 0.8, fontSize: 18 }}>Files</div>
-                                <div style={{ fontSize: 44, fontWeight: 900 }}>{wrappedData.card3.metrics.files_count}</div>
-                              </div>
-                              <div style={{ padding: 22, borderRadius: 18, background: 'rgba(255,255,255,0.06)' }}>
-                                <div style={{ opacity: 0.8, fontSize: 18 }}>Errors</div>
-                                <div style={{ fontSize: 44, fontWeight: 900 }}>{Math.round(wrappedData.card3.metrics.error_ratio * 100)}%</div>
-                              </div>
-                              <div style={{ padding: 22, borderRadius: 18, background: 'rgba(255,255,255,0.06)' }}>
-                                <div style={{ opacity: 0.8, fontSize: 18 }}>Approvals</div>
-                                <div style={{ fontSize: 44, fontWeight: 900 }}>{Math.round(wrappedData.card3.metrics.approval_ratio * 100)}%</div>
-                              </div>
-                              <div style={{ padding: 22, borderRadius: 18, background: 'rgba(255,255,255,0.06)' }}>
-                                <div style={{ opacity: 0.8, fontSize: 18 }}>Favourite agent</div>
-                                <div style={{ fontSize: 32, fontWeight: 900, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {wrappedData.card3.metrics.favourite_agent}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        <div style={{ position: 'absolute', bottom: 52, left: 64, right: 64, opacity: 0.7, fontSize: 18 }}>
-                          Generated locally by SwarmWatch
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ fontSize: 24, opacity: 0.8 }}>Loading…</div>
-                    )}
-                  </div>
+                  {/* Share render target removed per request */}
 
                   {wrappedData ? (
                     <WrappedCard
@@ -1996,8 +1829,6 @@ function App() {
                         setWrappedProjectPath(p);
                         void refreshWrapped({ projectPath: p });
                       }}
-                      onShare={(idx) => void shareWrapped(idx)}
-                      shareDisabled={wrappedLoading}
                     />
                   ) : (
                     <div className="wrappedPanel">

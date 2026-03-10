@@ -464,6 +464,7 @@ body,
 .wrappedPanel {
   position: absolute;
   left: 50%;
+  right:50%;
   top: 50%;
   transform: translate(-50%, -50%);
   width: 300px;
@@ -472,13 +473,14 @@ body,
   max-height: none;
   overflow: hidden;
   scrollbar-width: none;
-  background: rgb(20, 20, 24);
+  background: rgb(20, 20, 24) !important;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 16px;
   padding: 14px;
   box-shadow: 0 18px 55px rgba(0, 0, 0, 0.5);
   z-index: 8;
   color: rgba(255, 255, 255, 0.92);
+  isolation: isolate;
 }
 
 .wrappedPanel::-webkit-scrollbar {
@@ -493,21 +495,7 @@ body,
   gap: 10px;
 }
 
-.wrappedShareBtn {
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.92);
-  border-radius: 9999px;
-  padding: 6px 10px;
-  font-size: 11px;
-  cursor: pointer;
-  height: 30px;
-}
-
-.wrappedShareBtn:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
+/* removed legacy share button styles */
 
 .wrappedControls {
   margin-top: 8px;
@@ -559,20 +547,6 @@ body,
   outline: none;
 }
 
-.wrappedCards {
-  margin-top: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.wrappedMiniCard {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 14px;
-  padding: 10px;
-}
-
 /* Pager styles */
 .wrappedPager { display: flex; align-items: center; gap: 8px; }
 .wrappedPagerBtn {
@@ -587,58 +561,254 @@ body,
 .wrappedPagerDots { display: flex; align-items: center; gap: 6px; }
 .dot { width: 6px; height: 6px; border-radius: 9999px; background: rgba(255, 255, 255, 0.3); }
 .dot.on { background: rgba(255, 255, 255, 0.9); }
-.wrappedMiniHeader { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.wrappedCarousel { margin-top: 10px; }
 
-.wrappedMiniTitle {
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.6px;
-  text-transform: uppercase;
-  opacity: 0.8;
+.posterHeaderBar .posterSub { display: none; }
+.posterHeaderBar .settingsTitle {
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  text-align: center;
 }
 
-.wrappedGrid {
-  margin-top: 8px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+/* Center header when pager removed */
+.posterHeaderBar { justify-content: center; }
+
+.posterPreviewWrap {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  position: relative;
 }
 
-.wrappedStat {
+/* Side pager buttons placed beside the main card */
+.posterSideBtn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid rgba(238, 10, 10, 0.12);
+  background: rgba(0,0,0,0.2);
+  color: rgba(255,255,255,0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 6;
+}
+.posterSideBtn.left { left: 1px; }
+.posterSideBtn.right { right: 1px; }
+
+.posterPreview {
+  margin: 12px auto 0 auto;
+  width: calc(100% - 40px);
+  border-radius: 18px;
+  padding: 0;
+  position: relative;
+  isolation: isolate;
+}
+
+.posterMini {
+  border-radius: 16px;
+  padding: 12px;
+  color: white;
+  font-size: 11px;
+  line-height: 1.3;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  /* Opaque base so orbit avatars never bleed through */
+  background-color: rgb(20, 20, 24) !important;
+  isolation: isolate;
 }
 
-.wrappedStat.wide {
-  grid-column: 1 / 3;
-}
-
-.wrappedStat .k {
-  font-size: 10px;
+.posterMiniHeader {
+  display: flex;
+  justify-content: space-between;
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
   opacity: 0.75;
 }
 
-.wrappedStat .v {
-  font-size: 12px;
-  font-weight: 800;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.posterMiniHero {
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1;
 }
 
-.wrappedArchetypeName {
-  margin-top: 6px;
+.posterMiniHero span {
+  font-size: 10px;
+  margin-left: 4px;
+  letter-spacing: 0.2em;
+}
+
+.posterMiniTitle {
   font-size: 13px;
-  font-weight: 850;
+  font-weight: 800;
 }
 
-.wrappedArchetypeDesc {
-  margin-top: 4px;
-  font-size: 11px;
-  opacity: 0.85;
+.posterMiniCaption {
+  font-size: 10px;
+  opacity: 0.7;
 }
+
+.posterMiniBars {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.posterMiniMetric {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 4px;
+  font-size: 10px;
+}
+.posterMiniMetric span { text-transform: uppercase; letter-spacing: 0.15em; }
+.posterMiniMetric strong { font-size: 10px; }
+
+.posterMiniBrand {
+  margin-top: 6px;
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  opacity: 0.6;
+  text-align: center;
+  font-weight: 700;
+}
+
+.posterMiniBarLabel {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  opacity: 0.75;
+  padding: 0 4px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+.posterMiniBarLabel span:first-child { text-align: left; }
+.posterMiniBarLabel span:last-child { text-align: right; }
+
+.posterMiniTrack {
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  overflow: hidden;
+}
+
+.posterMiniFill {
+  height: 100%;
+  border-radius: inherit;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  transition: width 200ms ease;
+}
+
+
+.posterMiniStats {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 10px;
+}
+
+.posterMiniStats span {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 4px;
+}
+
+.posterMiniStats strong {
+  font-weight: 700;
+}
+
+/* removed legacy per-card share button styles */
+
+.posterHint { margin-top: 6px; font-size: 10px; opacity: 0.6; }
+
+.posterCard {
+  width: 952px;
+  min-height: 1520px;
+  padding: 72px;
+  border-radius: 56px;
+  color: #f8f8ff;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  font-size: 20px;
+  font-weight: 500;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 40px 160px rgba(0, 0, 0, 0.45);
+  /* Solid base layer under themed gradients for opacity */
+  background-color: rgb(16, 16, 26) !important;
+  isolation: isolate;
+}
+
+.posterCard::before {
+  content: '';
+  position: absolute;
+  inset: -25%;
+  background-image: radial-gradient(circle at 10% 20%, rgba(255, 255, 255, 0.25) 1px, transparent 35%),
+    radial-gradient(circle at 80% 10%, rgba(255, 255, 255, 0.25) 1px, transparent 30%),
+    radial-gradient(circle at 50% 80%, rgba(255, 255, 255, 0.2) 1px, transparent 40%);
+  background-size: 240px 240px, 320px 320px, 280px 280px;
+  opacity: 0.35;
+  animation: posterConfetti 24s linear infinite;
+  pointer-events: none;
+}
+
+/* removed legacy share variant */
+
+
+.posterFooterLink {
+  margin-top: auto;
+  font-size: 0.75em;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  opacity: 0.65;
+  text-align: center;
+}
+@keyframes posterConfetti {
+  from { background-position: 0 0, 0 0, 0 0; }
+  to { background-position: 320px 480px, -240px 360px, 200px -320px; }
+}
+
+.posterHeader { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+.posterBadge { font-size: 0.5em; letter-spacing: 0.4em; text-transform: uppercase; opacity: 0.75; }
+.posterTagline { font-size: 0.8em; opacity: 0.65; margin-top: 6px; }
+.posterMeta { font-size: 0.8em; font-weight: 800; text-transform: uppercase; }
+
+.posterHeroTitle { font-size: 1.6em; font-weight: 800; }
+.posterHero { display: flex; flex-direction: column; gap: 12px; }
+.posterHeroNumber { font-size: 4.8em; font-weight: 900; line-height: 1; }
+.posterHeroNumber span { font-size: 0.3em; margin-left: 12px; opacity: 0.8; }
+.posterHeroCaption { font-size: 0.9em; opacity: 0.8; }
+
+.posterStatGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.posterStatCard { background: rgba(255,255,255,0.08); border-radius: 24px; padding: 20px; font-size: 0.85em; display: flex; flex-direction: column; gap: 4px; }
+.posterStatCard strong { font-size: 1.6em; font-weight: 900; }
+.posterStatCard.span2 { grid-column: span 2; }
+
+.posterPillRow { display: flex; flex-wrap: wrap; gap: 12px; }
+.posterChip { background: rgba(255,255,255,0.12); border-radius: 999px; padding: 10px 16px; display: flex; flex-direction: column; font-size: 0.75em; }
+.posterChip strong { font-size: 1.4em; }
+
+.posterSplit { display: flex; flex-wrap: wrap; gap: 8px; font-size: 0.75em; }
+.posterSplit span { background: rgba(0,0,0,0.2); border-radius: 12px; padding: 6px 10px; }
+
+.posterDetails { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; font-size: 0.7em; }
+.posterDetails strong { font-size: 1.4em; }
+
+.posterFooter { margin-top: auto; font-size: 0.7em; opacity: 0.75; text-transform: uppercase; letter-spacing: 0.28em; }
+
+.theme-summary { background-image: radial-gradient(circle at top left, rgba(254,249,195,0.25), transparent 45%), linear-gradient(135deg, #111129, #25145b 55%, #331a70); }
+.theme-project { background-image: radial-gradient(circle at top right, rgba(95,245,255,0.28), transparent 35%), linear-gradient(135deg, #041c2c, #0f3d49 60%, #18414e); }
+.theme-archetype { background-image: radial-gradient(circle at 20% 20%, rgba(255,166,231,0.28), transparent 35%), linear-gradient(135deg, #240a2d, #401a43 60%, #28112f); }
 
 .settingsPanel {
   position: absolute;
@@ -647,7 +817,7 @@ body,
   transform: translate(-50%, -50%);
   width: 200px;
   max-width: 200px;
-  background: rgb(20, 20, 24);
+  background: rgb(20, 20, 24) !important;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 16px;
   padding: 14px;
@@ -659,6 +829,7 @@ body,
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   z-index: 5;
+  isolation: isolate;
 }
 
 .approvalsPanel {
@@ -725,7 +896,7 @@ body,
   max-height: 240px;
   overflow: auto;
   scrollbar-width: none;
-  background: rgb(245, 245, 248);
+  background: rgb(245, 245, 248) !important;
   border: 1px solid rgba(0, 0, 0, 0.12);
   border-radius: 16px;
   padding: 14px;
@@ -735,6 +906,7 @@ body,
   -webkit-backdrop-filter: none;
   z-index: 6;
   color: rgba(10, 10, 12, 0.95);
+  isolation: isolate;
 }
 
 .activityPanel::-webkit-scrollbar {
@@ -1289,3 +1461,13 @@ body,
 .infoVal.detail {
   max-width: 240px;
 }
+
+.posterBarLabel {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8em;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+.posterBarLabel span:first-child { text-align: left; }
+.posterBarLabel span:last-child { text-align: right; }
