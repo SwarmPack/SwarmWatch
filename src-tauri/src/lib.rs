@@ -162,6 +162,7 @@ fn open_context(agent_family: String, raw: serde_json::Value) -> Result<(), Stri
     }
 }
 
+
 #[tauri::command]
 fn integrations_status() -> serde_json::Value {
     integrations::integration_status().unwrap_or_else(|e| serde_json::json!({"error": e}))
