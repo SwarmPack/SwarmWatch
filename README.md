@@ -114,6 +114,7 @@ Rules:
 ## 🔒 Security & Privacy
 
 - All hooks run locally; inter‑process communication is over a local WebSocket/HTTP on 127.0.0.1:4100.
+- SwarmWatch sends minimal, anonymous telemetry to calculate DAU to improve the product — no prompts, code, or file paths are sent. All the data is stored in user's local SQLite database.
 - Note: the local port 4100 endpoint is unauthenticated today; we plan to add authentication/authorization.
 
 <hr style="border:0;border-top:1px solid #e5e7eb;margin:12px 0;" />

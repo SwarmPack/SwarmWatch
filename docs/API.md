@@ -208,4 +208,72 @@ Currently supported:
 
 ```json
 { "type": "approval_decision", "requestId": "<id>", "decision": "allow|deny|ask", "reason": "optional" }
+
 ```
+
+---
+
+# Telemetry (minimal analytics)
+
+SwarmWatch may send **minimal, anonymous telemetry** to PostHog to understand product usage.
+
+Constraints:
+- **No prompts, code, file paths, commands, or user content** are ever included.
+- Uses an **anonymous per-device `distinct_id`** generated locally and persisted in `settings.json`.
+- Events are **fire-and-forget**: queued and flushed asynchronously; failures are ignored.
+  - Implementation detail: a small persisted outbox may buffer events for up to ~2 hours during offline periods.
+
+## Event schema
+
+All telemetry events share:
+
+| Property | Type | Required | Notes |
+|---|---:|:---:|---|
+| `distinct_id` | string | ✅ | Anonymous per-device id (UUID v4) |
+| `platform` | string | ✅ | `macos` \| `windows` \| `linux` \| `other` |
+| `app_version` | string | optional | SwarmWatch version |
+
+### A) Daily unique avatar sessions
+
+Goal: count **unique avatar sessions spun up per distinct user per day** without double-counting across:
+- inactive→active transitions,
+- orbit eviction,
+- UI close/reopen,
+- app restart.
+
+Event name: `swarmwatch_avatar_session_daily`
+
+Properties:
+
+| Property | Type | Required | Notes |
+|---|---:|:---:|---|
+| `day` | string | ✅ | Local day label `YYYY-MM-DD` computed at *receipt time* |
+| `agent_family` | string | ✅ | Only: `cursor` \| `claude` \| `cline` \| `vscode` |
+
+Deduping rule:
+- Only emit once per tuple: `(distinct_id, day, agent_family, agent_key)`.
+  - `agent_key` is used **locally** for dedupe (stable avatar/session key), but is **not sent** in telemetry.
+
+### B) UI navigation clicks
+
+Event name: `swarmwatch_ui_click`
+
+Properties:
+
+| Property | Type | Required | Notes |
+|---|---:|:---:|---|
+| `target` | string | ✅ | One of: `recap` \| `approvals` \| `activity` \| `settings` |
+| `state` | string | optional | `open` or `close` (if you choose to track toggle state) |
+
+Deduping:
+- No dedupe required (simple click counter). Optional local batching to reduce network chatter.
+
+### Debug
+
+Implementations may also emit a dev-only event `swarmwatch_telemetry_ping` to validate configuration.
+
+## Implementation notes (non-normative)
+
+- For “daily unique avatar sessions”, `agent_key` is only needed for **local dedupe**. It should not be sent to PostHog.
+- Compute `day` using **receipt time** (local clock) to avoid client timestamp skew.
+

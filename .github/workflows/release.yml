@@ -155,6 +155,11 @@ jobs:
         env:
           # Needed because tauri.conf.json uses $env:SWARM_UPDATER_PUBKEY
           SWARM_UPDATER_PUBKEY: ${{ secrets.SWARM_UPDATER_PUBKEY }}
+          # Minimal telemetry (PostHog) config injected at build-time for Vite.
+          # NOTE: These are PostHog public project values (not secrets in the auth sense),
+          # but we keep them in GH secrets/vars for centralized configuration.
+          VITE_POSTHOG_KEY: ${{ secrets.VITE_POSTHOG_KEY }}
+          VITE_POSTHOG_HOST: ${{ secrets.VITE_POSTHOG_HOST }}
           # REQUIRED for `bundle.createUpdaterArtifacts`: tauri build signs updater bundles
           # using these exact env var names.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.SWARM_TAURI_SIGNING_PRIVATE_KEY }}
