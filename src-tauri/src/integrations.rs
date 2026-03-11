@@ -491,6 +491,13 @@ fn legacy_runner_paths() -> Vec<String> {
     out
 }
 
+fn legacy_vscode_workspace_cmd_markers() -> Vec<&'static str> {
+    // Legacy executable/binary name previously shipped for VS Code hooks.
+    // We remove these when repairing workspace hooks so users get migrated
+    // to the stable identity shim path (vscode-hook).
+    vec!["swarmwatch-vscode-hook-sim"]
+}
+
 fn ensure_parent_dir(path: &Path) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -701,6 +708,111 @@ fn should_remove_swarmwatch_shim_cmd(cmd: &str, shim_cmd_plain: &str) -> bool {
         }
     }
     false
+}
+
+fn should_remove_vscode_workspace_cmd(cmd: &str, shim_cmd_plain: &str, shim_cmd_plain_no_space: &str) -> bool {
+    if cmd.contains(shim_cmd_plain) {
+        return true;
+    }
+    if !shim_cmd_plain_no_space.trim().is_empty() && cmd.contains(shim_cmd_plain_no_space) {
+        return true;
+    }
+    for m in legacy_vscode_workspace_cmd_markers() {
+        if cmd.contains(m) {
+            return true;
+        }
+    }
+    // Also remove legacy runner invocations.
+    for legacy in legacy_runner_paths() {
+        if cmd.contains(&legacy) {
+            return true;
+        }
+    }
+    false
+}
+
+fn vscode_workspace_events() -> [&'static str; 4] {
+    ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"]
+}
+
+/// Merge/repair an existing VS Code workspace hook JSON.
+///
+/// Goals:
+/// - preserve user hooks in the same file (do not overwrite blindly)
+/// - ensure exactly one SwarmWatch hook entry per managed event
+/// - remove legacy SwarmWatch commands (runner paths / prior binaries)
+/// - preserve the existing schema shape when possible:
+///   - canonical: hooks is an array of objects (with hookEventName)
+///   - legacy/back-compat: hooks is an object-of-arrays
+fn merge_vscode_workspace_hooks_json(
+    original: &Value,
+    cmd: &str,
+    shim_cmd_plain: &str,
+    shim_cmd_plain_no_space: &str,
+) -> Value {
+    let mut root = if original.is_object() {
+        original.clone()
+    } else {
+        json!({})
+    };
+
+    // Canonical schema: hooks is an array of objects.
+    if let Some(arr) = root.get("hooks").and_then(|x| x.as_array()) {
+        let mut out: Vec<Value> = vec![];
+        // Keep all items except ones that match our legacy/current command.
+        for item in arr {
+            let Some(cmd_s) = item.get("command").and_then(|x| x.as_str()) else {
+                out.push(item.clone());
+                continue;
+            };
+            if should_remove_vscode_workspace_cmd(cmd_s, shim_cmd_plain, shim_cmd_plain_no_space) {
+                continue;
+            }
+            out.push(item.clone());
+        }
+        // Ensure one entry per managed event.
+        for ev in vscode_workspace_events() {
+            out.push(json!({
+              "type": "command",
+              "hookEventName": ev,
+              "command": cmd
+            }));
+        }
+        root["hooks"] = json!(out);
+        return root;
+    }
+
+    // Legacy/back-compat schema: hooks is an object-of-arrays.
+    let hooks_obj = ensure_obj(&mut root, "hooks");
+
+    // Cleanup: remove legacy/current SwarmWatch entries from ALL hook arrays.
+    // Keep all user entries.
+    for (_k, v) in hooks_obj.iter_mut() {
+        let Some(arr) = v.as_array_mut() else {
+            continue;
+        };
+        arr.retain(|item| {
+            let Some(cmd_s) = item.get("command").and_then(|x| x.as_str()) else {
+                return true;
+            };
+            !should_remove_vscode_workspace_cmd(cmd_s, shim_cmd_plain, shim_cmd_plain_no_space)
+        });
+    }
+
+    // Ensure one SwarmWatch entry for each managed event.
+    for ev in vscode_workspace_events() {
+        let arr = ensure_arr(hooks_obj, ev);
+        // Dedupe again inside the event array just in case.
+        arr.retain(|item| {
+            let Some(cmd_s) = item.get("command").and_then(|x| x.as_str()) else {
+                return true;
+            };
+            !should_remove_vscode_workspace_cmd(cmd_s, shim_cmd_plain, shim_cmd_plain_no_space)
+        });
+        arr.push(json!({"type": "command", "command": cmd}));
+    }
+
+    root
 }
 
 fn arr_contains_command(arr: &[Value], runner_cmd: &str) -> bool {
@@ -1025,12 +1137,12 @@ pub fn write_vscode_workspace_hooks(workspace_path: &Path) -> Result<PathBuf, St
     //   ~/Library/ApplicationSupport -> "Application Support"
     // which we can create at install time.
     // If it exists, write the no-space path without extra quoting.
-    let cmd_no_space = cmd_plain.replace(
+    let cmd_plain_no_space = cmd_plain.replace(
         "/Library/Application Support/",
         "/Library/ApplicationSupport/",
     );
-    let cmd = if cmd_no_space != cmd_plain && Path::new(&cmd_no_space).exists() {
-        cmd_no_space
+    let cmd = if cmd_plain_no_space != cmd_plain && Path::new(&cmd_plain_no_space).exists() {
+        cmd_plain_no_space.clone()
     } else {
         // Fallback: shell quote.
         hook_command_value(&cmd_plain)
@@ -1040,30 +1152,12 @@ pub fn write_vscode_workspace_hooks(workspace_path: &Path) -> Result<PathBuf, St
     ensure_dir(&path)?;
 
     // VS Code hook schema is still preview and has changed across versions.
-    // Empirically, the object-of-arrays schema below is the most compatible
-    // (and matches what SwarmWatch historically wrote when it "worked before"):
-    // {
-    //   "hooks": {
-    //     "PreToolUse": [{"type":"command","command":"/abs/path"}],
-    //     ...
-    //   }
-    // }
+    // We attempt to be both:
+    // - safe for power users (preserve other entries in this file)
+    // - repairable (remove legacy SwarmWatch commands)
+    // - compatible across schema shapes (array-of-objects vs object-of-arrays)
     let original = if path.exists() { read_json_file(&path)? } else { json!({}) };
-
-    let events = ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"];
-    let mut hooks_obj = serde_json::Map::<String, Value>::new();
-    for ev in events {
-        hooks_obj.insert(
-            ev.to_string(),
-            json!([
-                {
-                    "type": "command",
-                    "command": cmd.clone()
-                }
-            ]),
-        );
-    }
-    let root = json!({"hooks": hooks_obj});
+    let root = merge_vscode_workspace_hooks_json(&original, &cmd, &cmd_plain, &cmd_plain_no_space);
 
     if !json_value_eq(&original, &root) {
         let _ = settings::backup_file_with_retention(
@@ -1079,6 +1173,102 @@ pub fn write_vscode_workspace_hooks(workspace_path: &Path) -> Result<PathBuf, St
     }
 
     Ok(path)
+}
+
+/// Best-effort workspace hook repair for all VS Code workspaces the user has
+/// enabled in SwarmWatch settings.
+///
+/// This is safe to call on startup:
+/// - no panics
+/// - preserves user hooks inside `.github/hooks/swarmwatch-vscode.json`
+/// - only touches workspaces the user already opted into
+pub fn repair_vscode_enabled_workspaces_best_effort() {
+    let workspaces = settings::list_vscode_workspaces().unwrap_or_default();
+    if workspaces.is_empty() {
+        return;
+    }
+    for p in workspaces {
+        let path = Path::new(&p);
+        if path.as_os_str().is_empty() {
+            continue;
+        }
+        // If a workspace path no longer exists, skip silently.
+        if !path.exists() {
+            continue;
+        }
+        if let Err(e) = write_vscode_workspace_hooks(path) {
+            eprintln!("[integrations] vscode workspace repair failed for {}: {e}", path.display());
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cmd_s() -> &'static str {
+        "/abs/SwarmWatch/bin/vscode-hook"
+    }
+
+    #[test]
+    fn vscode_merge_preserves_custom_entries_object_of_arrays() {
+        let orig = json!({
+          "hooks": {
+            "UserPromptSubmit": [
+              {"type":"command", "command":"echo hi"},
+              {"type":"command", "command":"/abs/SwarmWatch/bin/swarmwatch-vscode-hook-sim"}
+            ],
+            "PreToolUse": [
+              {"type":"command", "command":"/abs/SwarmWatch/bin/swarmwatch-vscode-hook-sim"},
+              {"type":"command", "command":"custom-tool"}
+            ],
+            "CustomEvent": [
+              {"type":"command", "command":"custom-event-cmd"}
+            ]
+          }
+        });
+
+        let merged = merge_vscode_workspace_hooks_json(&orig, cmd_s(), cmd_s(), "");
+        // Custom event preserved.
+        assert_eq!(
+            merged
+                .get("hooks")
+                .and_then(|h| h.get("CustomEvent"))
+                .and_then(|x| x.as_array())
+                .unwrap()
+                .len(),
+            1
+        );
+
+        // Managed events contain custom + exactly one SwarmWatch command.
+        let pre = merged
+            .get("hooks")
+            .and_then(|h| h.get("PreToolUse"))
+            .and_then(|x| x.as_array())
+            .unwrap();
+        assert!(pre.iter().any(|v| v.get("command").and_then(|x| x.as_str()) == Some("custom-tool")));
+        let sw = pre
+            .iter()
+            .filter(|v| v.get("command").and_then(|x| x.as_str()) == Some(cmd_s()))
+            .count();
+        assert_eq!(sw, 1);
+    }
+
+    #[test]
+    fn vscode_merge_preserves_custom_entries_array_schema() {
+        let orig = json!({
+          "hooks": [
+            {"type":"command", "hookEventName":"PreToolUse", "command":"custom1"},
+            {"type":"command", "hookEventName":"PreToolUse", "command":"/abs/SwarmWatch/bin/swarmwatch-vscode-hook-sim"}
+          ]
+        });
+        let merged = merge_vscode_workspace_hooks_json(&orig, cmd_s(), cmd_s(), "");
+        let arr = merged.get("hooks").and_then(|x| x.as_array()).unwrap();
+        assert!(arr.iter().any(|v| v.get("command").and_then(|x| x.as_str()) == Some("custom1")));
+        assert!(!arr.iter().any(|v| v.get("command").and_then(|x| x.as_str()) == Some("/abs/SwarmWatch/bin/swarmwatch-vscode-hook-sim")));
+        // Our events appended.
+        assert!(arr.iter().any(|v| v.get("command").and_then(|x| x.as_str()) == Some(cmd_s())));
+    }
 }
 
 pub fn disable_vscode_workspace_hooks(workspace_path: &Path) -> Result<serde_json::Value, String> {

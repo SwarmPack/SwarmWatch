@@ -50,16 +50,32 @@ pub fn open_db() -> Result<Db, String> {
 }
 
 fn migrate(conn: &Connection) -> Result<(), String> {
+    // Bootstrap schema_version tracking.
+    // This enables future safe incremental migrations.
     conn.execute_batch(
         r#"
 CREATE TABLE IF NOT EXISTS schema_version (
   version INTEGER NOT NULL
 );
+"#,
+    )
+    .map_err(|e| format!("sqlite migrate bootstrap failed: {e}"))?;
 
-INSERT INTO schema_version(version)
-SELECT 1
-WHERE NOT EXISTS (SELECT 1 FROM schema_version);
+    // Determine current version.
+    let cur: i64 = conn
+        .query_row(
+            "SELECT version FROM schema_version LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| format!("sqlite read schema_version failed: {e}"))?
+        .unwrap_or(0);
 
+    // v1: initial schema.
+    if cur < 1 {
+        conn.execute_batch(
+            r#"
 CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   ts_s INTEGER NOT NULL,
@@ -108,9 +124,20 @@ CREATE TABLE IF NOT EXISTS approvals (
 
 CREATE INDEX IF NOT EXISTS approvals_created ON approvals(created_at_s);
 CREATE INDEX IF NOT EXISTS approvals_agent_created ON approvals(agent_key, created_at_s);
+"#,
+        )
+        .map_err(|e| format!("sqlite migrate v1 failed: {e}"))?;
 
--- Backfill: older installs may have NULL project_path but a populated project_name.
--- Wrapped uses project_path as the grouping key; when missing, fall back to name.
+        // Set schema version to 1.
+        conn.execute("DELETE FROM schema_version", [])
+            .map_err(|e| format!("sqlite schema_version reset failed: {e}"))?;
+        conn.execute("INSERT INTO schema_version(version) VALUES (1)", [])
+            .map_err(|e| format!("sqlite schema_version set failed: {e}"))?;
+    }
+
+    // v1 data backfill (safe to re-run): ensure project_path when only project_name exists.
+    conn.execute_batch(
+        r#"
 UPDATE events
 SET project_path = project_name
 WHERE project_path IS NULL
@@ -118,7 +145,8 @@ WHERE project_path IS NULL
   AND TRIM(project_name) <> '';
 "#,
     )
-    .map_err(|e| format!("sqlite migrate failed: {e}"))?;
+    .map_err(|e| format!("sqlite backfill failed: {e}"))?;
+
     Ok(())
 }
 
