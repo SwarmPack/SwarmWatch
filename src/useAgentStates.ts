@@ -9,6 +9,7 @@ import type {
   SettingsMessage,
   WsMessage
 } from './types';
+import { trackAvatarSessionDaily } from './telemetry';
 
 const WS_URL = 'ws://127.0.0.1:4100';
 
@@ -140,6 +141,10 @@ export function useAgentStates(): AgentStore {
         // `${family}:${instanceId}` (one avatar per IDE session/chat).
         const normalized: AgentStateEvent = { ...ev, agentFamily: fam, agentKey: key };
         lastSeenRef.current[key] = now();
+
+        // Minimal telemetry: daily unique avatar sessions.
+        // Local-only dedupe uses (day, family, agentKey); we do NOT send agentKey.
+        trackAvatarSessionDaily({ agentFamily: fam, agentKey: key });
 
         setStore((prev) => {
           const byKey = { ...prev.byKey, [key]: normalized };
