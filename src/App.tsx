@@ -8,6 +8,7 @@ import { LottieCircle } from './components/LottieCircle';
 import { WrappedCard } from './components/WrappedCard';
 import type { WrappedOut, WrappedProjectOption, WrappedRange } from './types';
 import { fetchWrapped } from './wrappedClient';
+import { trackUiClick } from './telemetry';
 // Share/screenshot experiments removed per request.
 
 type UpdateStatus =
@@ -1653,7 +1654,7 @@ function App() {
             >
               <div className="sunTitle">{selectedAgentName}</div>
               <div className="sunSub">{selectedAgent.state}</div>
-              {selectedProjectName ? <div className="sunUpdated">Project {selectedProjectName}</div> : null}
+              {selectedProjectName ? <div className="sunUpdated">Project: {selectedProjectName}</div> : null}
               {selectedAgent.state === 'inactive' ? (
                 lastActiveLabel ? (
                   <div className="sunUpdated">{lastActiveLabel}</div>
@@ -1730,60 +1731,65 @@ function App() {
                 </div>
               ) : null}
 
-              <button
-                className="settingsBtn"
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const opening = !activityOpen;
-                  setActivityOpen(opening);
-                  if (opening) {
-                    setSettingsOpen(false);
-                    setApprovalsOpen(false);
-                    setWrappedOpen(false);
-                  }
-                }}
-                aria-label="Activity"
-              >
-                <span aria-hidden>Activity</span>
-              </button>
+              <div className="sunQuickActions">
+                <button
+                  className="settingsBtn"
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const opening = !wrappedOpen;
+                    trackUiClick('recap', opening ? 'open' : 'close');
+                    setWrappedOpen(opening);
+                    if (opening) {
+                      setSettingsOpen(false);
+                      setApprovalsOpen(false);
+                      setActivityOpen(false);
+                      void refreshWrapped();
+                    }
+                  }}
+                  aria-label="Recap"
+                >
+                  <span aria-hidden>Recap</span>
+                </button>
 
-              <button
-                className="settingsBtn"
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const opening = !wrappedOpen;
-                  setWrappedOpen(opening);
-                  if (opening) {
-                    setSettingsOpen(false);
-                    setApprovalsOpen(false);
-                    setActivityOpen(false);
-                    void refreshWrapped();
-                  }
-                }}
-                aria-label="Wrapped"
-              >
-                <span aria-hidden>Wrapped</span>
-              </button>
+                <button
+                  className="settingsBtn"
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const opening = !approvalsOpen;
+                    trackUiClick('approvals', opening ? 'open' : 'close');
+                    setApprovalsOpen(opening);
+                    if (opening) {
+                      setSettingsOpen(false);
+                      setActivityOpen(false);
+                      setWrappedOpen(false);
+                    }
+                  }}
+                  aria-label="Approvals"
+                >
+                  <span aria-hidden>Approvals</span>
+                </button>
 
-              <button
-                className="settingsBtn"
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const opening = !approvalsOpen;
-                  setApprovalsOpen(opening);
-                  if (opening) {
-                    setSettingsOpen(false);
-                    setActivityOpen(false);
-                    setWrappedOpen(false);
-                  }
-                }}
-                aria-label="Approvals"
-              >
-                <span aria-hidden>Approvals</span>
-              </button>
+                <button
+                  className="settingsBtn"
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const opening = !activityOpen;
+                    trackUiClick('activity', opening ? 'open' : 'close');
+                    setActivityOpen(opening);
+                    if (opening) {
+                      setSettingsOpen(false);
+                      setApprovalsOpen(false);
+                      setWrappedOpen(false);
+                    }
+                  }}
+                  aria-label="Audit Trail"
+                >
+                  <span aria-hidden>Audit Trail</span>
+                </button>
+              </div>
 
               <button
                 className="settingsBtn icon"
@@ -1791,6 +1797,7 @@ function App() {
                 onClick={(e) => {
                   e.stopPropagation();
                   const opening = !settingsOpen;
+                  trackUiClick('settings', opening ? 'open' : 'close');
                   setSettingsOpen(opening);
                   if (opening) {
                     setActivityOpen(false);

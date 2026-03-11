@@ -13,7 +13,7 @@ const CARD_THEMES = [
   },
   {
     key: 'project',
-    label: 'Project Focus',
+    label: 'Project Specific',
     className: 'theme-project',
     tagline: 'Where the pack spent its time'
   },
@@ -104,7 +104,7 @@ export function WrappedPosterCardView({ data, cardIndex, range, variant = 'live'
               Projects<strong>{summary.projects_count}</strong>
             </span>
             <span>
-              Prompts<strong>{data.card3.metrics.prompts_count}</strong>
+              Prompted<strong>{data.card3.metrics.prompts_count} times</strong>
             </span>
           </div>
           <div className="posterMiniBars">
@@ -138,7 +138,7 @@ export function WrappedPosterCardView({ data, cardIndex, range, variant = 'live'
               Prompted<strong>{project.prompted} times</strong>
             </span>
             <span>
-              Prompt chars<strong>{project.prompt_chars}</strong>
+              Prompt characters<strong>{project.prompt_chars}</strong>
             </span>
             {/* <span>
               Repo hrs<strong>{project.project?.agent_hours?.toFixed(1) ?? '—'}</strong>
@@ -174,7 +174,7 @@ export function WrappedPosterCardView({ data, cardIndex, range, variant = 'live'
               Agents worked<strong>{data.card1.agent_hours.toFixed(1)} hours</strong>
             </span>
             <span>
-              Fav agent<strong>{archetype.metrics.favourite_agent}</strong>
+              Favourite agent<strong>{archetype.metrics.favourite_agent}</strong>
             </span>
             <span>
               Files touched<strong>{archetype.metrics.files_count}</strong>
@@ -194,7 +194,7 @@ export function WrappedPosterCardView({ data, cardIndex, range, variant = 'live'
           <span className="posterMiniRange">{rangeLabel(range)}</span>
         </div>
         {body}
-        <div className="posterMiniBrand">Visit: github.com/SwarmPack/SwarmWatch</div>
+        <div className="posterMiniBrand">SwarmWatch</div>
       </div>
     );
   }
