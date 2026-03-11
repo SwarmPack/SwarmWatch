@@ -64,12 +64,6 @@ function normalizeHost(host?: string): string | null {
   return withProto.replace(/\/+$/, '');
 }
 
-function captureUrl(): string | null {
-  const host = normalizeHost(POSTHOG_HOST);
-  if (!host) return null;
-  return `${host}/capture/`;
-}
-
 function batchUrl(): string | null {
   const host = normalizeHost(POSTHOG_HOST);
   if (!host) return null;
@@ -221,7 +215,7 @@ function loadDailyCache(): Record<string, Record<string, Record<string, 1>>> {
       dailyCache = {};
       return dailyCache;
     }
-    dailyCache = parsed;
+    dailyCache = parsed as Record<string, Record<string, Record<string, 1>>>;
     return dailyCache;
   } catch {
     dailyCache = {};
