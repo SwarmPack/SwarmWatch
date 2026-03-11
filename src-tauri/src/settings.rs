@@ -30,6 +30,25 @@ pub struct SwarmWatchSettings {
     /// immediately allow, while still emitting a visible "Auto-allowed" state.
     #[serde(default)]
     pub auto_approve_families: BTreeMap<String, bool>,
+
+    /// Anonymous per-device analytics id (PostHog distinct_id).
+    ///
+    /// Generated once and stored locally. Not user-identifying.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub telemetry_distinct_id: Option<String>,
+}
+
+pub fn telemetry_distinct_id() -> Result<String, String> {
+    let mut st = read_settings()?;
+    if let Some(id) = st.telemetry_distinct_id.clone() {
+        if !id.trim().is_empty() {
+            return Ok(id);
+        }
+    }
+    let id = uuid::Uuid::new_v4().to_string();
+    st.telemetry_distinct_id = Some(id.clone());
+    write_settings(&st)?;
+    Ok(id)
 }
 
 pub fn root_dir() -> Result<PathBuf, String> {

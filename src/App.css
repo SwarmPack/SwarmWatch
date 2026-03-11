@@ -459,6 +459,16 @@ body,
   background: rgba(0, 0, 0, 0.25);
 }
 
+/* Compact vertical stack for the three main sun actions (Recap / Approvals / Audit Trail) */
+.sunQuickActions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px; /* half of the previous spacing */
+}
+.sunQuickActions .settingsBtn {
+  margin-top: 0; /* let gap control spacing */
+}
+
 /* ---------------- Wrapped panel ---------------- */
 
 .wrappedPanel {
@@ -584,9 +594,10 @@ body,
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  width: 20px;
-  height: 36px;
-  border-radius: 8px;
+  width: 30px;
+  height: 56px;
+  font-size: 22px;
+  border-radius: 12px;
   border: 1px solid rgba(238, 10, 10, 0.12);
   background: rgba(0,0,0,0.2);
   color: rgba(255,255,255,0.92);
@@ -596,8 +607,8 @@ body,
   cursor: pointer;
   z-index: 6;
 }
-.posterSideBtn.left { left: 1px; }
-.posterSideBtn.right { right: 1px; }
+.posterSideBtn.left { left: -12px; }
+.posterSideBtn.right { right: -12px; }
 
 .posterPreview {
   margin: 12px auto 0 auto;

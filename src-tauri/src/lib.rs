@@ -241,6 +241,36 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TelemetryContext {
+    distinct_id: String,
+    platform: String,
+}
+
+#[tauri::command]
+fn telemetry_context() -> Result<TelemetryContext, String> {
+    // Anonymous per-device id, stored locally in settings.json.
+    let distinct_id = settings::telemetry_distinct_id()?;
+
+    // Platform label for analytics.
+    let platform = if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(windows) {
+        "windows"
+    } else if cfg!(target_os = "linux") {
+        "linux"
+    } else {
+        "other"
+    }
+    .to_string();
+
+    Ok(TelemetryContext {
+        distinct_id,
+        platform,
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -253,6 +283,7 @@ pub fn run() {
             app_restart,
             save_file_bytes,
             save_file_base64,
+            telemetry_context,
             integrations_status,
             integrations_enable,
             integrations_disable,
@@ -265,6 +296,11 @@ pub fn run() {
             open_context
         ])
         .setup(|app| {
+            // Best-effort: repair VS Code workspace hook files on startup.
+            // Only touches workspaces the user has already opted into (saved in settings.json).
+            // Never blocks startup.
+            crate::integrations::repair_vscode_enabled_workspaces_best_effort();
+
             // Start the local control plane server (HTTP + WS) inside the Tauri app.
             // This makes the app self-contained (no Node runtime required).
             tauri::async_runtime::spawn(async {
