@@ -150,10 +150,9 @@ jobs:
           mv src-tauri/tauri.conf.json.tmp src-tauri/tauri.conf.json
           echo "Injected updater pubkey into src-tauri/tauri.conf.json"
 
-      # Windows MSI bundling uses WiX (candle/light). Sometimes WiX fails at `light.exe`
-      # with a non-obvious error. We try MSI first (so behavior matches prior releases),
-      # but automatically fall back to NSIS so releases don't get blocked.
-      - name: Build Tauri app (Windows - prefer MSI, fallback NSIS)
+      # Windows: publish portable exe only (no MSI/NSIS). This avoids WiX/NSIS flakiness
+      # on CI runners and guarantees a consistent release artifact.
+      - name: Build Tauri app (Windows - no bundling)
         if: matrix.os_name == 'windows'
         shell: bash
         env:
@@ -165,18 +164,7 @@ jobs:
           RUST_BACKTRACE: 1
         run: |
           set -euo pipefail
-          echo "[windows] trying MSI build (wix)"
-          if npx tauri build --target ${{ matrix.rust_target }} --bundles msi; then
-            echo "[windows] MSI build succeeded"
-            exit 0
-          fi
-
-          echo "[windows] MSI build failed; dumping tauri wix tools directory (if present)"
-          ls -la "${LOCALAPPDATA:-}/tauri" 2>/dev/null || true
-          ls -la "${LOCALAPPDATA:-}/tauri/WixTools314" 2>/dev/null || true
-
-          echo "[windows] falling back to NSIS build"
-          npx tauri build --target ${{ matrix.rust_target }} --bundles nsis
+          npx tauri build --target ${{ matrix.rust_target }} --bundles none
 
       - name: Build Tauri app (non-Windows)
         if: matrix.os_name != 'windows'
@@ -229,28 +217,11 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          # IMPORTANT: Tauri updater on Windows expects an installer artifact (NSIS/MSI),
-          # not a portable zip. If we publish only a zip, in-app update may download but
-          # not actually install/replace the running app.
-          #
-          # So we publish the bundle installer produced by `tauri build`.
-          $bundleRoot = "src-tauri/target/${{ matrix.rust_target }}/release/bundle"
-          if (!(Test-Path $bundleRoot)) { throw "bundle output not found at $bundleRoot" }
-
-          # Prefer MSI if present, otherwise fall back to NSIS setup exe.
-          $msi = Get-ChildItem -Path $bundleRoot -Recurse -Filter "*.msi" | Select-Object -First 1
-          if ($msi) {
-            Copy-Item -Force -Path $msi.FullName -Destination "dist/swarmwatch-windows-x64.msi"
-            Write-Host "Packaged MSI: $($msi.FullName)"
-            exit 0
-          }
-
-          $nsis = Get-ChildItem -Path $bundleRoot -Recurse -Filter "*.exe" |
-            Where-Object { $_.FullName -match "\\\\nsis\\\\" -and $_.Name -match "setup" } |
-            Select-Object -First 1
-          if (-not $nsis) { throw "No Windows installer found under $bundleRoot (expected NSIS setup exe or MSI)" }
-          Copy-Item -Force -Path $nsis.FullName -Destination "dist/swarmwatch-windows-x64-setup.exe"
-          Write-Host "Packaged NSIS: $($nsis.FullName)"
+          # Portable exe artifact (no installer bundles).
+          $exe = "src-tauri/target/${{ matrix.rust_target }}/release/swarmwatch.exe"
+          if (!(Test-Path $exe)) { throw "built exe not found at $exe" }
+          Copy-Item -Force -Path $exe -Destination "dist/swarmwatch-windows-x64.exe"
+          Write-Host "Packaged EXE: $exe"
 
       - name: Sign release archive
         shell: bash
@@ -259,7 +230,6 @@ jobs:
           SWARM_TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.SWARM_TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          # Include NSIS fallback: swarmwatch-windows-x64-setup.exe
           # Also ensure we don't accidentally pick up the .sig.
           ARCHIVE=$(ls dist/swarmwatch-${{ matrix.os_name }}-${{ matrix.arch_name }}* | grep -v '\.sig$' | head -1)
           npx tauri signer sign "$ARCHIVE" \
@@ -323,12 +293,8 @@ jobs:
           add_platform "darwin-aarch64" "swarmwatch-macos-arm64.app.tar.gz"
           add_platform "darwin-x86_64" "swarmwatch-macos-x64.app.tar.gz"
           add_platform "linux-x86_64" "swarmwatch-linux-x64.AppImage"
-          # Windows: prefer MSI, otherwise NSIS setup exe.
-          if [ -f "artifacts/swarmwatch-windows-x64.msi.sig" ]; then
-            add_platform "windows-x86_64" "swarmwatch-windows-x64.msi"
-          else
-            add_platform "windows-x86_64" "swarmwatch-windows-x64-setup.exe"
-          fi
+          # Windows: portable exe only.
+          add_platform "windows-x86_64" "swarmwatch-windows-x64.exe"
 
           # Hard fail if any platform is missing. Silent skipping makes updates look broken.
           missing=0
