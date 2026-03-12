@@ -150,20 +150,44 @@ jobs:
           mv src-tauri/tauri.conf.json.tmp src-tauri/tauri.conf.json
           echo "Injected updater pubkey into src-tauri/tauri.conf.json"
 
-      - name: Build Tauri app
+      # Windows MSI bundling uses WiX (candle/light). Sometimes WiX fails at `light.exe`
+      # with a non-obvious error. We try MSI first (so behavior matches prior releases),
+      # but automatically fall back to NSIS so releases don't get blocked.
+      - name: Build Tauri app (Windows - prefer MSI, fallback NSIS)
+        if: matrix.os_name == 'windows'
         shell: bash
         env:
-          # Needed because tauri.conf.json uses $env:SWARM_UPDATER_PUBKEY
           SWARM_UPDATER_PUBKEY: ${{ secrets.SWARM_UPDATER_PUBKEY }}
-          # Minimal telemetry (PostHog) config injected at build-time for Vite.
-          # NOTE: These are PostHog public project values (not secrets in the auth sense),
-          # but we keep them in GH secrets/vars for centralized configuration.
           VITE_POSTHOG_KEY: ${{ secrets.VITE_POSTHOG_KEY }}
           VITE_POSTHOG_HOST: ${{ secrets.VITE_POSTHOG_HOST }}
-          # REQUIRED for `bundle.createUpdaterArtifacts`: tauri build signs updater bundles
-          # using these exact env var names.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.SWARM_TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.SWARM_TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          RUST_BACKTRACE: 1
+        run: |
+          set -euo pipefail
+          echo "[windows] trying MSI build (wix)"
+          if npx tauri build --target ${{ matrix.rust_target }} --bundles msi; then
+            echo "[windows] MSI build succeeded"
+            exit 0
+          fi
+
+          echo "[windows] MSI build failed; dumping tauri wix tools directory (if present)"
+          ls -la "${LOCALAPPDATA:-}/tauri" 2>/dev/null || true
+          ls -la "${LOCALAPPDATA:-}/tauri/WixTools314" 2>/dev/null || true
+
+          echo "[windows] falling back to NSIS build"
+          npx tauri build --target ${{ matrix.rust_target }} --bundles nsis
+
+      - name: Build Tauri app (non-Windows)
+        if: matrix.os_name != 'windows'
+        shell: bash
+        env:
+          SWARM_UPDATER_PUBKEY: ${{ secrets.SWARM_UPDATER_PUBKEY }}
+          VITE_POSTHOG_KEY: ${{ secrets.VITE_POSTHOG_KEY }}
+          VITE_POSTHOG_HOST: ${{ secrets.VITE_POSTHOG_HOST }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.SWARM_TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.SWARM_TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          RUST_BACKTRACE: 1
         run: |
           npx tauri build --target ${{ matrix.rust_target }}
 

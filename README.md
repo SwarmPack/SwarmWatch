@@ -11,9 +11,19 @@ SwarmWatch is an activity monitor and control plane for AI coding swarms. It sho
 
 ## 🎬 Demo
 
-<p align="center">
-  <img src="public/SwarmIMovie.gif" alt="SwarmWatch demo" width="720" />
-</p>
+<iframe 
+  width="560" 
+  height="315" 
+  src="https://www.youtube.com/embed/BTbIjOn0AyI"
+  referrerpolicy="strict-origin-when-cross-origin"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+  title="YouTube video player" 
+  allowfullscreen>
+</iframe>
+
+If your renderer blocks iframes, use this link:
+
+[Watch the demo on YouTube](https://www.youtube.com/watch?v=BTbIjOn0AyI)
 
 <hr style="border:0;border-top:1px solid #e5e7eb;margin:12px 0;" />
 
@@ -114,7 +124,7 @@ Rules:
 ## 🔒 Security & Privacy
 
 - All hooks run locally; inter‑process communication is over a local WebSocket/HTTP on 127.0.0.1:4100.
-- SwarmWatch sends minimal, anonymous telemetry to calculate DAU to improve the product — no prompts, code, or file paths are sent. All the data is stored in user's local SQLite database.
+- SwarmWatch may send **minimal, anonymous telemetry** (daily unique avatar sessions + clicks on Recap/Approvals/Activity/Settings) to improve the product — **no prompts, code, or file paths are sent**. Telemetry is queued locally (best-effort) and sent asynchronously.
 - Note: the local port 4100 endpoint is unauthenticated today; we plan to add authentication/authorization.
 
 <hr style="border:0;border-top:1px solid #e5e7eb;margin:12px 0;" />
