@@ -150,9 +150,10 @@ jobs:
           mv src-tauri/tauri.conf.json.tmp src-tauri/tauri.conf.json
           echo "Injected updater pubkey into src-tauri/tauri.conf.json"
 
-      # Windows: publish portable exe only (no MSI/NSIS). This avoids WiX/NSIS flakiness
-      # on CI runners and guarantees a consistent release artifact.
-      - name: Build Tauri app (Windows - no bundling)
+      # Windows: publish portable exe only (no MSI/NSIS).
+      # IMPORTANT: this repo's tauri CLI only supports `--bundles msi|nsis` (no `none`),
+      # so we avoid `tauri build` entirely and build the exe via cargo.
+      - name: Build app (Windows - portable exe)
         if: matrix.os_name == 'windows'
         shell: bash
         env:
@@ -164,7 +165,13 @@ jobs:
           RUST_BACKTRACE: 1
         run: |
           set -euo pipefail
-          npx tauri build --target ${{ matrix.rust_target }} --bundles none
+          # Build frontend explicitly (tauri build normally runs beforeBuildCommand).
+          npm run build
+
+          # Build the desktop app exe without invoking any Windows bundlers.
+          cargo build --manifest-path src-tauri/Cargo.toml \
+            --release \
+            --target ${{ matrix.rust_target }}
 
       - name: Build Tauri app (non-Windows)
         if: matrix.os_name != 'windows'
